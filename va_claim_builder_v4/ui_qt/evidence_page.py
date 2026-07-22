@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QThread
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QListWidget,
-    QListWidgetItem, QMessageBox, QPushButton, QSplitter, QTableWidget,
+    QListWidgetItem, QMessageBox, QProgressBar, QPushButton, QSplitter, QTableWidget,
     QTableWidgetItem, QTabWidget, QTextEdit, QVBoxLayout, QWidget,
 )
 
@@ -11,8 +11,11 @@ from core.claims import ClaimManager
 from core.documents import DocumentManager
 from core.evidence import (
     EVIDENCE_STRENGTHS, EVIDENCE_TYPES, OCR_FILTERS, REVIEW_STATUSES, EvidenceManager,
+    EvidenceAnalysisRecord, EvidenceAnalysisService,
 )
-from core.projects import ProjectInfo
+from core.projects import AppPaths, ProjectInfo
+from core.settings import SettingsManager
+from workers import EvidenceAnalysisWorker
 
 
 class EvidencePage(QWidget):
@@ -21,6 +24,10 @@ class EvidencePage(QWidget):
     def __init__(self, project: ProjectInfo, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.manager = EvidenceManager(project)
+        self.project = project
+        app_paths = AppPaths(root=project.root.parent.parent).ensure()
+        self.settings_manager = SettingsManager(app_paths)
+        self.analysis = EvidenceAnalysisService(project, settings_manager=self.settings_manager)
         self.claims = ClaimManager(project)
         self.documents = DocumentManager(project)
         self.current_id: str | None = None
@@ -28,6 +35,8 @@ class EvidencePage(QWidget):
         self._active_claim_id: str | None = None
         self._loading = False
         self._saved_snapshot: tuple[object, ...] | None = None
+        self._analysis_thread: QThread | None = None
+        self._analysis_worker: EvidenceAnalysisWorker | None = None
 
         heading = QLabel("Evidence Review Workspace")
         heading.setStyleSheet("font-size: 22px; font-weight: 600;")
@@ -61,6 +70,7 @@ class EvidencePage(QWidget):
         self.table = QTableWidget(0, 7)
         self.table.setHorizontalHeaderLabels(["Title", "Review", "Type", "Date", "Provider / Source", "Claims", "OCR"])
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.table.setSelectionMode(QTableWidget.SelectionMode.ExtendedSelection)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.itemSelectionChanged.connect(self._load_selected)
         self.table.horizontalHeader().setStretchLastSection(True)
@@ -114,21 +124,56 @@ class EvidencePage(QWidget):
         source_tab = QWidget(); source_layout = QVBoxLayout(source_tab)
         source_layout.addLayout(source_form); source_layout.addWidget(QLabel("OCR text preview")); source_layout.addWidget(self.ocr_preview, 1)
 
-        tabs = QTabWidget(); tabs.addTab(details_tab, "Review"); tabs.addTab(claim_tab, "Claim Associations")
-        tabs.addTab(source_tab, "OCR & Source")
+        self.analysis_advisory = QLabel(
+            "AI-generated analysis is advisory only and is not a medical diagnosis or legal determination."
+        )
+        self.analysis_advisory.setWordWrap(True)
+        self.analysis_advisory.setStyleSheet("color: #8a4b08; font-weight: 600;")
+        self.analysis_history = QComboBox(); self.analysis_history.currentIndexChanged.connect(self._show_history_record)
+        self.analysis_metadata = QLabel("No analysis has been run for this evidence.")
+        self.analysis_metadata.setWordWrap(True)
+        self.analysis_result = QTextEdit(); self.analysis_result.setReadOnly(True)
+        self.analysis_recommendations = QListWidget(); self.analysis_recommendations.setMinimumHeight(90)
+        self.apply_recommendations_button = QPushButton("Link Approved Recommendations")
+        self.apply_recommendations_button.clicked.connect(self._apply_recommendations)
+        self.apply_recommendations_button.setEnabled(False)
+        analysis_tab = QWidget(); analysis_layout = QVBoxLayout(analysis_tab)
+        analysis_layout.addWidget(self.analysis_advisory)
+        analysis_layout.addWidget(QLabel("Analysis history")); analysis_layout.addWidget(self.analysis_history)
+        analysis_layout.addWidget(self.analysis_metadata); analysis_layout.addWidget(self.analysis_result, 1)
+        analysis_layout.addWidget(QLabel("Recommended claim associations (review before linking)"))
+        analysis_layout.addWidget(self.analysis_recommendations)
+        analysis_layout.addWidget(self.apply_recommendations_button)
+
+        self.editor_tabs = QTabWidget(); self.editor_tabs.addTab(details_tab, "Review")
+        self.editor_tabs.addTab(claim_tab, "Claim Associations")
+        self.editor_tabs.addTab(source_tab, "OCR & Source"); self.editor_tabs.addTab(analysis_tab, "AI Analysis")
         left = QWidget(); left_layout = QVBoxLayout(left); left_layout.setContentsMargins(0, 0, 0, 0)
         left_layout.addWidget(self.table, 1); left_layout.addWidget(self.empty_message)
-        splitter = QSplitter(); splitter.addWidget(left); splitter.addWidget(tabs)
+        splitter = QSplitter(); splitter.addWidget(left); splitter.addWidget(self.editor_tabs)
         splitter.setStretchFactor(0, 3); splitter.setStretchFactor(1, 2)
 
         new_button = QPushButton("New Evidence"); new_button.clicked.connect(self.clear_editor)
         save_button = QPushButton("Save Review"); save_button.clicked.connect(self.save)
         delete_button = QPushButton("Delete Evidence"); delete_button.clicked.connect(self.delete)
+        self.analyze_selected_button = QPushButton("Analyze Selected")
+        self.analyze_selected_button.clicked.connect(self._analyze_selected)
+        self.analyze_batch_button = QPushButton("Analyze Checked / Filtered")
+        self.analyze_batch_button.clicked.connect(self._analyze_checked_or_filtered)
+        self.cancel_analysis_button = QPushButton("Cancel Analysis")
+        self.cancel_analysis_button.clicked.connect(self._cancel_analysis); self.cancel_analysis_button.setEnabled(False)
+        self.refresh_analysis_button = QPushButton("Refresh Analysis")
+        self.refresh_analysis_button.clicked.connect(self._refresh_analysis)
         buttons = QHBoxLayout()
         for button in (new_button, save_button, delete_button): buttons.addWidget(button)
+        for button in (self.analyze_selected_button, self.analyze_batch_button,
+                       self.cancel_analysis_button, self.refresh_analysis_button): buttons.addWidget(button)
         buttons.addStretch()
+        self.analysis_progress = QProgressBar(); self.analysis_progress.setRange(0, 100); self.analysis_progress.setValue(0)
+        self.analysis_status = QLabel("Analysis ready")
         layout = QVBoxLayout(self); layout.addWidget(heading); layout.addWidget(description)
-        layout.addLayout(buttons); layout.addLayout(filters); layout.addWidget(splitter, 1)
+        layout.addLayout(buttons); layout.addWidget(self.analysis_progress); layout.addWidget(self.analysis_status)
+        layout.addLayout(filters); layout.addWidget(splitter, 1)
         self._reload_options(); self.refresh(); self._capture_snapshot()
 
     def _reload_options(self) -> None:
@@ -162,6 +207,7 @@ class EvidencePage(QWidget):
         if self._loading: return
         selected_id = self.current_id
         try:
+            checked_evidence = set(self._checked_evidence_ids()) if self.table.rowCount() else set()
             self._reload_options()
             records = self.manager.list(
                 review_status=str(self.status_filter.currentData() or "") or None,
@@ -177,6 +223,9 @@ class EvidencePage(QWidget):
                           record.provider_source, str(len(self.manager.claim_links_for_evidence(record.evidence_id))), record.ocr_status.title())
                 for column, value in enumerate(values):
                     item = QTableWidgetItem(value); item.setData(Qt.ItemDataRole.UserRole, record.evidence_id)
+                    if column == 0:
+                        item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+                        item.setCheckState(Qt.CheckState.Checked if record.evidence_id in checked_evidence else Qt.CheckState.Unchecked)
                     self.table.setItem(row, column, item)
             self.table.blockSignals(False); self.table.resizeColumnsToContents()
             self.empty_message.setVisible(not records)
@@ -186,6 +235,7 @@ class EvidencePage(QWidget):
                                        else "No evidence has been added to this project yet.")
             self._reload_duplicate_options(self.duplicate_of.currentData())
             self.current_id = selected_id; self._select_current()
+            self._refresh_analysis()
         except Exception as exc:
             self.table.blockSignals(False); self.empty_message.setVisible(True)
             self.empty_message.setText(f"Unable to load evidence: {exc}")
@@ -200,6 +250,7 @@ class EvidencePage(QWidget):
         self._reload_duplicate_options(); self.duplicate_of.setCurrentIndex(0); self.claim_note.clear()
         for index in range(self.claim_links.count()): self.claim_links.item(index).setCheckState(Qt.CheckState.Unchecked)
         self.table.clearSelection(); self._loading = False; self._update_source_review(); self._duplicate_state_changed()
+        self._refresh_analysis()
         self._capture_snapshot()
 
     def _load_selected(self) -> None:
@@ -225,6 +276,7 @@ class EvidencePage(QWidget):
                     Qt.CheckState.Checked if item.data(Qt.ItemDataRole.UserRole) in linked else Qt.CheckState.Unchecked)
             self.claim_note.clear(); self._loading = False; self._update_source_review(); self._duplicate_state_changed()
             self._capture_snapshot()
+            self._refresh_analysis()
         except Exception as exc:
             self._loading = False; QMessageBox.critical(self, "Unable to load evidence", str(exc))
 
@@ -314,3 +366,151 @@ class EvidencePage(QWidget):
         try:
             self.manager.delete(self.current_id); self._saved_snapshot = None; self.clear_editor(); self.refresh()
         except Exception as exc: QMessageBox.critical(self, "Unable to delete evidence", str(exc))
+
+    def _checked_evidence_ids(self) -> list[str]:
+        return [str(self.table.item(row, 0).data(Qt.ItemDataRole.UserRole)) for row in range(self.table.rowCount())
+                if self.table.item(row, 0) and self.table.item(row, 0).checkState() == Qt.CheckState.Checked]
+
+    def _analyze_selected(self) -> None:
+        rows = self.table.selectionModel().selectedRows()
+        if not rows:
+            QMessageBox.information(self, "AI evidence analysis", "Select an evidence item first."); return
+        evidence_id = str(self.table.item(rows[0].row(), 0).data(Qt.ItemDataRole.UserRole))
+        self._start_analysis([evidence_id])
+
+    def _analyze_checked_or_filtered(self) -> None:
+        evidence_ids = self._checked_evidence_ids()
+        if not evidence_ids:
+            evidence_ids = [str(self.table.item(row, 0).data(Qt.ItemDataRole.UserRole)) for row in range(self.table.rowCount())]
+        if not evidence_ids:
+            QMessageBox.information(self, "AI evidence analysis", "No evidence matches the current filters."); return
+        self._start_analysis(evidence_ids)
+
+    def _start_analysis(self, evidence_ids: list[str]) -> None:
+        if self._analysis_thread is not None:
+            QMessageBox.information(self, "AI evidence analysis", "Evidence analysis is already running."); return
+        thread = QThread(self)
+        worker = EvidenceAnalysisWorker(
+            self.project, evidence_ids,
+            service_factory=lambda project: EvidenceAnalysisService(project, settings_manager=self.settings_manager),
+        )
+        worker.moveToThread(thread); thread.started.connect(worker.run)
+        worker.progress.connect(self._analysis_progress_changed)
+        worker.analysis_updated.connect(lambda _analysis_id: self._refresh_analysis())
+        worker.completed.connect(self._analysis_completed); worker.failed.connect(self._analysis_failed)
+        worker.cancelled.connect(self._analysis_cancelled); worker.finished.connect(thread.quit)
+        worker.finished.connect(worker.deleteLater); thread.finished.connect(thread.deleteLater)
+        thread.finished.connect(self._analysis_finished)
+        self._analysis_thread = thread; self._analysis_worker = worker
+        self.analyze_selected_button.setEnabled(False); self.analyze_batch_button.setEnabled(False)
+        self.cancel_analysis_button.setEnabled(True); self.analysis_progress.setValue(0)
+        self.analysis_status.setText(f"Preparing {len(evidence_ids)} evidence analysis request(s)…")
+        thread.start()
+
+    def _cancel_analysis(self) -> None:
+        if self._analysis_worker:
+            self.cancel_analysis_button.setEnabled(False); self.analysis_status.setText("Cancelling analysis…")
+            self._analysis_worker.cancel()
+
+    def _analysis_progress_changed(self, percent: int, message: str) -> None:
+        self.analysis_progress.setValue(percent); self.analysis_status.setText(message)
+
+    def _analysis_completed(self, completed: int, failed: int) -> None:
+        self.analysis_progress.setValue(100)
+        self.analysis_status.setText(f"Analysis complete: {completed} completed, {failed} failed")
+        self._refresh_analysis()
+
+    def _analysis_failed(self, message: str) -> None:
+        self.analysis_status.setText(message); self._refresh_analysis()
+        QMessageBox.warning(self, "AI evidence analysis", message)
+
+    def _analysis_cancelled(self) -> None:
+        self.analysis_status.setText("Evidence analysis cancelled"); self._refresh_analysis()
+
+    def _analysis_finished(self) -> None:
+        self._analysis_thread = None; self._analysis_worker = None
+        self.analyze_selected_button.setEnabled(True); self.analyze_batch_button.setEnabled(True)
+        self.cancel_analysis_button.setEnabled(False); self._refresh_analysis()
+
+    def _refresh_analysis(self) -> None:
+        selected = self.analysis_history.currentData() if hasattr(self, "analysis_history") else None
+        self.analysis_history.blockSignals(True); self.analysis_history.clear()
+        if not self.current_id:
+            self.analysis_metadata.setText("Select an evidence item to view analysis history.")
+            self.analysis_result.clear(); self.analysis_recommendations.clear()
+            self.apply_recommendations_button.setEnabled(False); self.analysis_history.blockSignals(False); return
+        history = self.analysis.history(self.current_id)
+        for record in history:
+            label = f"{record.created_at} — {record.status.title()} — {record.provider or 'provider pending'}"
+            self.analysis_history.addItem(label, record.analysis_id)
+        index = self.analysis_history.findData(selected)
+        self.analysis_history.setCurrentIndex(index if index >= 0 else (0 if history else -1))
+        self.analysis_history.blockSignals(False)
+        self._show_history_record()
+
+    def _show_history_record(self) -> None:
+        analysis_id = self.analysis_history.currentData()
+        if not analysis_id:
+            self.analysis_metadata.setText("No analysis has been run for this evidence.")
+            self.analysis_result.clear(); self.analysis_recommendations.clear()
+            self.apply_recommendations_button.setEnabled(False); return
+        record = self.analysis.get(str(analysis_id)); redaction = "Applied" if record.redaction_applied else "Not applied"
+        self.analysis_metadata.setText(
+            f"Status: {record.status.title()} · Provider: {record.provider or '—'} · Model: {record.model or '—'} · "
+            f"Date: {record.completed_at or record.created_at} · Redaction: {redaction} · "
+            f"Confidence: {record.result.confidence.title() if record.result else '—'}"
+        )
+        if record.result:
+            self.analysis_result.setPlainText(self._format_analysis(record))
+        else:
+            self.analysis_result.setPlainText(record.error_message or "Analysis is pending.")
+        self.analysis_recommendations.clear()
+        if record.result:
+            for recommendation in record.result.recommended_claim_associations:
+                item = QListWidgetItem(
+                    f"{recommendation['claim_name']}: {recommendation['reason']}"
+                ); item.setData(Qt.ItemDataRole.UserRole, recommendation["claim_id"])
+                item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable); item.setCheckState(Qt.CheckState.Unchecked)
+                self.analysis_recommendations.addItem(item)
+        self.apply_recommendations_button.setEnabled(self.analysis_recommendations.count() > 0)
+
+    @staticmethod
+    def _format_analysis(record: EvidenceAnalysisRecord) -> str:
+        result = record.result
+        if not result: return record.error_message
+        labels = (
+            ("Summary", [result.summary]), ("Diagnoses or conditions", result.diagnoses_or_conditions),
+            ("Symptoms and functional limitations", result.symptoms_and_functional_limitations),
+            ("Treatment, testing, and medications", result.treatment_testing_medications),
+            ("Dates and providers", result.dates_and_providers),
+            ("Possible in-service events or exposures", result.in_service_events_or_exposures),
+            ("Possible nexus-supporting statements", result.nexus_supporting_statements),
+            ("Possible aggravation evidence", result.aggravation_evidence),
+            ("Possible secondary-service-connection evidence", result.secondary_service_connection_evidence),
+            ("Favorable evidence", result.favorable_evidence),
+            ("Unfavorable or contradictory evidence", result.unfavorable_or_contradictory_evidence),
+            ("Missing information or clarification needs", result.missing_information_or_clarification_needs),
+        )
+        sections = []
+        for title, values in labels:
+            sections.append(title + "\n" + ("\n".join(f"• {value}" for value in values) if values else "• None identified"))
+        return "\n\n".join(sections)
+
+    def _apply_recommendations(self) -> None:
+        claim_ids = [str(self.analysis_recommendations.item(i).data(Qt.ItemDataRole.UserRole))
+                     for i in range(self.analysis_recommendations.count())
+                     if self.analysis_recommendations.item(i).checkState() == Qt.CheckState.Checked]
+        if not claim_ids or not self.current_id:
+            QMessageBox.information(self, "Claim associations", "Check one or more recommendations first."); return
+        if QMessageBox.question(self, "Confirm claim associations",
+                                f"Link this evidence to {len(claim_ids)} reviewed recommended claim(s)?") != QMessageBox.StandardButton.Yes:
+            return
+        existing = {link.claim_id for link in self.manager.claim_links_for_evidence(self.current_id)}
+        for claim_id in claim_ids:
+            if claim_id not in existing:
+                self.manager.link_claim(self.current_id, claim_id)
+        linked = {link.claim_id for link in self.manager.claim_links_for_evidence(self.current_id)}
+        for index in range(self.claim_links.count()):
+            item = self.claim_links.item(index)
+            item.setCheckState(Qt.CheckState.Checked if item.data(Qt.ItemDataRole.UserRole) in linked else Qt.CheckState.Unchecked)
+        self._capture_snapshot(); self.refresh()

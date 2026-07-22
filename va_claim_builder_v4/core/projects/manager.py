@@ -13,7 +13,7 @@ from typing import Any
 from .paths import AppPaths, resolve_app_paths
 
 PROJECT_FOLDERS = ("uploads", "ocr", "ai", "evidence", "timeline", "reports", "cache", "logs", "temp")
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 
 EVIDENCE_SCHEMA = """
@@ -50,6 +50,27 @@ CREATE INDEX IF NOT EXISTS idx_evidence_document ON evidence(document_id);
 CREATE INDEX IF NOT EXISTS idx_evidence_date ON evidence(evidence_date);
 CREATE INDEX IF NOT EXISTS idx_claim_evidence_claim ON claim_evidence(claim_id);
 CREATE INDEX IF NOT EXISTS idx_claim_evidence_evidence ON claim_evidence(evidence_id);
+"""
+
+EVIDENCE_ANALYSIS_SCHEMA = """
+CREATE TABLE IF NOT EXISTS evidence_analyses (
+    analysis_id TEXT PRIMARY KEY,
+    evidence_id TEXT NOT NULL,
+    job_id TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',
+    provider TEXT NOT NULL DEFAULT '',
+    model TEXT NOT NULL DEFAULT '',
+    analysis_version TEXT NOT NULL,
+    result_json TEXT,
+    error_message TEXT NOT NULL DEFAULT '',
+    redaction_applied INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    completed_at TEXT,
+    FOREIGN KEY(evidence_id) REFERENCES evidence(evidence_id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_evidence_analyses_evidence ON evidence_analyses(evidence_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_evidence_analyses_status ON evidence_analyses(status);
+CREATE INDEX IF NOT EXISTS idx_evidence_analyses_job ON evidence_analyses(job_id);
 """
 
 
@@ -214,6 +235,7 @@ class ProjectManager:
             ProjectManager._add_column(connection, "claim_evidence", "relevance_notes", "TEXT NOT NULL DEFAULT ''")
             connection.execute("CREATE INDEX IF NOT EXISTS idx_evidence_review_status ON evidence(review_status)")
             connection.execute("CREATE INDEX IF NOT EXISTS idx_evidence_duplicate ON evidence(duplicate_of_evidence_id)")
+            connection.executescript(EVIDENCE_ANALYSIS_SCHEMA)
             connection.execute(
                 "INSERT OR REPLACE INTO schema_metadata(key, value) VALUES('schema_version', ?)",
                 (str(SCHEMA_VERSION),),

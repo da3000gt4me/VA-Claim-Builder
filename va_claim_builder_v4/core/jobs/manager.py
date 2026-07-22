@@ -94,6 +94,16 @@ class JobManager:
                 """,
                 (_utc_now(),),
             )
+            table = connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='evidence_analyses'"
+            ).fetchone()
+            if table:
+                connection.execute(
+                    "UPDATE evidence_analyses SET status='failed', "
+                    "error_message='Application closed before analysis completed', completed_at=? "
+                    "WHERE status='pending' AND job_id IN (SELECT job_id FROM jobs WHERE status='interrupted')",
+                    (_utc_now(),),
+                )
             connection.commit()
             return cursor.rowcount
 
