@@ -1,51 +1,24 @@
-# VA Claim Builder 4.0 Stable — Multi-Agent AI Evidence Intelligence
+# VA Claim Builder Version 4.2.0 RC1
 
-A local-first Streamlit application for organizing VA claim evidence, OCR review, semantic evidence extraction, claim-element analysis, timelines, contradiction review, drafting, rating screening, DBQ/C&P parsing, literature review packets, possible additional-condition discovery, and final binder assembly.
+VA Claim Builder is a local-first PySide6 desktop application for organizing a VA claim project. Version 4.2 includes project and document management, OCR, claims, evidence review and association, advisory AI evidence analysis, a medical timeline, nexus-draft preparation, DBQ preparation, rating strategy, claim optimization, and local submission-package generation.
 
-## Install
+This is Release Candidate software for real-world testing, not a final production release. It assists organization and review; it is not legal representation, a medical determination, or a guarantee of a VA outcome.
 
-### Windows
-Run `scripts/install_windows.bat`, then `scripts/run_windows.bat`.
+## Start
 
-### macOS/Linux
-Run `bash scripts/install_mac_linux.sh`, then `bash scripts/run_mac_linux.sh`.
+Use Python 3.11 or 3.12, create a virtual environment, install `requirements.txt`, and run:
 
-## AI configuration
+```shell
+python desktop_app.py
+```
 
-Copy `.env.example` to `.env`. Configure `OPENAI_API_KEY` and/or `XAI_API_KEY`. Multi-agent mode can call both providers concurrently and compare results. Consumer ChatGPT/Grok logins are not used directly; API access is separate.
+Cloud AI is optional. API credentials are encrypted in the platform application-data directory. Enable **Local-only** to prevent cloud provider calls. Package generation, backups, restore, diagnostics, and project validation operate locally.
 
-## Safety
+## Release verification
 
-All AI findings require source citations and human approval. The program does not provide legal representation, create a clinician's medical opinion, or guarantee a VA outcome. Literature supports clinician review but does not establish veteran-specific causation by itself.
+```shell
+python -m pytest -q tests/test_v42_rc1_hardening.py
+QT_QPA_PLATFORM=offscreen python -m pytest -q
+```
 
-See `docs/USER_GUIDE.md`, `docs/SECURITY.md`, and `docs/RELEASE_VALIDATION_REPORT.md`.
-
-## Version 4.0.1 additions
-- Legal-authority research and validation for statutes, regulations, precedential Federal Circuit/CAVC opinions, VA General Counsel precedent opinions, and nonprecedential fact-pattern research.
-- Mandatory source verification, binding-status labels, negative-treatment field, and human legal review.
-- Provider-ready DOCX nexus templates using neutral professional formatting or provider-supplied/authorized branding only.
-- The software does not scrape and imitate clinic letterhead or imply that an unsigned draft was issued by a provider.
-
-
-## Version 4.1.11 upload-first automation
-- Upload documents before creating claims.
-- Form 20-0995 issue fields automatically populate the claim list.
-- OCR/retrieval and Semantic Evidence Review each provide a Run All action across the complete project.
-- Manual claim entry and single-claim retrieval remain available only for correction and diagnostics.
-
-
-## Version 4.1.15 Section 21A claim extraction and editing
-
-- Reads page 5, Section 21A of VA Form 20-0995 as the authoritative claim list.
-- Separates each numbered Section 21A row into its own claim.
-- Stops before Section 21B decision dates.
-- Provides extraction diagnostics and a Section 21A text preview.
-- Allows every claim to be renamed, assigned a theory/status, or deleted.
-
-
-## Version 4.1.15 changes
-- Isolates each uploaded Form 20-0995 and extracts no more than the nine numbered Section 21A rows per form.
-- Adds bulk selection and deletion for claims.
-- Corrects Historical Timeline category matching and retains useful undated medical/military events as editable proposals.
-- Auto-populates timeline proposals during Run All OCR & Retrieval.
-- Displays Semantic Evidence Review thresholds and relevance scores as percentages.
+See [Quick Start](docs/QUICK_START.md), [User Guide](docs/USER_GUIDE.md), [Installation](docs/INSTALLATION.md), [Privacy](docs/PRIVACY_DATA_HANDLING.md), [Backup and Restore](docs/BACKUP_RESTORE.md), [Troubleshooting](docs/TROUBLESHOOTING.md), and [RC1 Release Notes](docs/RELEASE_NOTES_4.2.0_RC1.md).

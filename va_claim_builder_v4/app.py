@@ -11,6 +11,7 @@ from core.storage.project_db import ProjectDB
 from core.workflow.migrations import MigrationManager
 from ui.ai_settings import render_ai_settings
 from ui.project_workspace import render_project_workspace
+from core.version import FULL_NAME
 
 load_dotenv()
 BASE = Path(__file__).resolve().parent
@@ -21,8 +22,8 @@ MigrationManager(db.path).migrate()
 project_id = db.ensure_default_project()
 project_root = DATA / "projects" / project_id
 
-st.set_page_config(page_title="VA Claim Builder 4.0", layout="wide")
-st.title("VA Claim Builder 4.0 — AI Evidence Intelligence")
+st.set_page_config(page_title=FULL_NAME, layout="wide")
+st.title(f"{FULL_NAME} — AI Evidence Intelligence")
 st.warning("Human review is required. This application does not provide medical or legal opinions and cannot guarantee a VA outcome.")
 
 workspace, ai_test = st.tabs(["Project Workspace", "AI Evidence Test Console"])

@@ -47,6 +47,17 @@ class JobManager:
             connection.commit()
         return self.get(job_id)
 
+    def create_unique(self, job_type: str, payload: dict[str, Any] | None = None) -> JobInfo:
+        """Return an equivalent active job instead of scheduling a duplicate."""
+        encoded = json.dumps(payload or {}, sort_keys=True)
+        with sqlite3.connect(self.project.database_path) as connection:
+            row = connection.execute(
+                "SELECT job_id FROM jobs WHERE job_type=? AND payload_json=? "
+                "AND status IN ('queued','running','cancelling') ORDER BY created_at LIMIT 1",
+                (job_type, encoded),
+            ).fetchone()
+        return self.get(row[0]) if row else self.create(job_type, payload)
+
     def update(self, job_id: str, *, status: str | None = None, progress: int | None = None, message: str | None = None) -> JobInfo:
         current = self.get(job_id)
         new_progress = current.progress if progress is None else max(0, min(100, int(progress)))
@@ -76,12 +87,19 @@ class JobManager:
             raise KeyError(job_id)
         return self._from_row(row)
 
-    def list(self, limit: int = 100) -> list[JobInfo]:
+    def list(self, limit: int = 100, *, offset: int = 0, status: str = "") -> list[JobInfo]:
         with sqlite3.connect(self.project.database_path) as connection:
             connection.row_factory = sqlite3.Row
-            rows = connection.execute(
-                "SELECT * FROM jobs ORDER BY created_at DESC LIMIT ?", (max(1, int(limit)),)
-            ).fetchall()
+            if status:
+                rows = connection.execute(
+                    "SELECT * FROM jobs WHERE status=? ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                    (status, max(1, int(limit)), max(0, int(offset))),
+                ).fetchall()
+            else:
+                rows = connection.execute(
+                    "SELECT * FROM jobs ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                    (max(1, int(limit)), max(0, int(offset))),
+                ).fetchall()
         return [self._from_row(row) for row in rows]
 
     def recover_interrupted(self) -> int:
@@ -188,6 +206,9 @@ class JobManager:
                     updated_at TEXT NOT NULL
                 )
                 """
+            )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS idx_jobs_status_updated ON jobs(status, updated_at DESC)"
             )
             connection.commit()
 

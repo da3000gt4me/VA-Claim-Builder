@@ -1,8 +1,6 @@
 {
-  "version": "4.1.15",
-  "increment": 14,
-  "channel": "stable",
-  "name": "VA Claim Builder 4.1.14 Form 20-0995 Section 21A and Editable Claims Hotfix",
-  "release_name": "Claim List, Timeline, and Percentage Review Hotfix",
-  "build": "4.1.15"
+  "version": "4.2.0rc1",
+  "display_version": "4.2.0 RC1",
+  "release_channel": "release-candidate",
+  "schema_version": 10
 }
