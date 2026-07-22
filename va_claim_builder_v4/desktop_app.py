@@ -6,6 +6,7 @@ import sys
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 from core.projects import ProjectManager
+from core.settings import SettingsManager
 from ui_qt import MainWindow, ProjectDialog
 
 
@@ -24,6 +25,7 @@ def main() -> int:
 
     manager = ProjectManager()
     configure_logging(manager)
+    SettingsManager(manager.paths).apply_to_environment()
     try:
         project = ProjectDialog.choose_or_create(None, manager)
     except Exception as exc:
