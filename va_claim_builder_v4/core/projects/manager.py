@@ -13,7 +13,7 @@ from typing import Any
 from .paths import AppPaths, resolve_app_paths
 
 PROJECT_FOLDERS = ("uploads", "ocr", "ai", "evidence", "timeline", "reports", "cache", "logs", "temp")
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 EVIDENCE_SCHEMA = """
@@ -27,14 +27,19 @@ CREATE TABLE IF NOT EXISTS evidence (
     provider_source TEXT NOT NULL DEFAULT '',
     relevance_notes TEXT NOT NULL DEFAULT '',
     strength_status TEXT NOT NULL DEFAULT 'unreviewed',
+    review_status TEXT NOT NULL DEFAULT 'unreviewed',
+    reviewer_notes TEXT NOT NULL DEFAULT '',
+    duplicate_of_evidence_id TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
-    FOREIGN KEY(document_id) REFERENCES documents(document_id) ON DELETE SET NULL
+    FOREIGN KEY(document_id) REFERENCES documents(document_id) ON DELETE SET NULL,
+    FOREIGN KEY(duplicate_of_evidence_id) REFERENCES evidence(evidence_id) ON DELETE SET NULL
 );
 CREATE TABLE IF NOT EXISTS claim_evidence (
     claim_id TEXT NOT NULL,
     evidence_id TEXT NOT NULL,
     linked_at TEXT NOT NULL,
+    relevance_notes TEXT NOT NULL DEFAULT '',
     PRIMARY KEY(claim_id, evidence_id),
     FOREIGN KEY(claim_id) REFERENCES claims(claim_id) ON DELETE CASCADE,
     FOREIGN KEY(evidence_id) REFERENCES evidence(evidence_id) ON DELETE CASCADE
@@ -203,8 +208,20 @@ class ProjectManager:
         with sqlite3.connect(path) as connection:
             connection.execute("PRAGMA foreign_keys = ON")
             connection.executescript(EVIDENCE_SCHEMA)
+            ProjectManager._add_column(connection, "evidence", "review_status", "TEXT NOT NULL DEFAULT 'unreviewed'")
+            ProjectManager._add_column(connection, "evidence", "reviewer_notes", "TEXT NOT NULL DEFAULT ''")
+            ProjectManager._add_column(connection, "evidence", "duplicate_of_evidence_id", "TEXT REFERENCES evidence(evidence_id) ON DELETE SET NULL")
+            ProjectManager._add_column(connection, "claim_evidence", "relevance_notes", "TEXT NOT NULL DEFAULT ''")
+            connection.execute("CREATE INDEX IF NOT EXISTS idx_evidence_review_status ON evidence(review_status)")
+            connection.execute("CREATE INDEX IF NOT EXISTS idx_evidence_duplicate ON evidence(duplicate_of_evidence_id)")
             connection.execute(
                 "INSERT OR REPLACE INTO schema_metadata(key, value) VALUES('schema_version', ?)",
                 (str(SCHEMA_VERSION),),
             )
             connection.commit()
+
+    @staticmethod
+    def _add_column(connection: sqlite3.Connection, table: str, column: str, definition: str) -> None:
+        columns = {str(row[1]) for row in connection.execute(f"PRAGMA table_info({table})")}
+        if column not in columns:
+            connection.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
