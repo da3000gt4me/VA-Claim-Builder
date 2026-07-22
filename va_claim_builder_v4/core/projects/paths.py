@@ -6,13 +6,31 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, init=False)
 class AppPaths:
     home: Path
     projects: Path
     logs: Path
     backups: Path
     settings_file: Path
+
+    def __init__(
+        self,
+        home: Path | None = None,
+        projects: Path | None = None,
+        logs: Path | None = None,
+        backups: Path | None = None,
+        settings_file: Path | None = None,
+        *,
+        root: Path | None = None,
+    ) -> None:
+        """Accept both the original ``home`` name and the V4.2 ``root`` alias."""
+        base = Path(home or root) if (home is not None or root is not None) else _default_home()
+        object.__setattr__(self, "home", base)
+        object.__setattr__(self, "projects", Path(projects or base / "Projects"))
+        object.__setattr__(self, "logs", Path(logs or base / "Logs"))
+        object.__setattr__(self, "backups", Path(backups or base / "Backups"))
+        object.__setattr__(self, "settings_file", Path(settings_file or base / "settings.json"))
 
     def ensure(self) -> "AppPaths":
         for path in (self.home, self.projects, self.logs, self.backups):

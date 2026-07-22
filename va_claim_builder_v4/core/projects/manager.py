@@ -13,7 +13,39 @@ from typing import Any
 from .paths import AppPaths, resolve_app_paths
 
 PROJECT_FOLDERS = ("uploads", "ocr", "ai", "evidence", "timeline", "reports", "cache", "logs", "temp")
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+
+
+EVIDENCE_SCHEMA = """
+CREATE TABLE IF NOT EXISTS evidence (
+    evidence_id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    evidence_type TEXT NOT NULL DEFAULT 'other',
+    document_id TEXT,
+    evidence_date TEXT NOT NULL DEFAULT '',
+    provider_source TEXT NOT NULL DEFAULT '',
+    relevance_notes TEXT NOT NULL DEFAULT '',
+    strength_status TEXT NOT NULL DEFAULT 'unreviewed',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY(document_id) REFERENCES documents(document_id) ON DELETE SET NULL
+);
+CREATE TABLE IF NOT EXISTS claim_evidence (
+    claim_id TEXT NOT NULL,
+    evidence_id TEXT NOT NULL,
+    linked_at TEXT NOT NULL,
+    PRIMARY KEY(claim_id, evidence_id),
+    FOREIGN KEY(claim_id) REFERENCES claims(claim_id) ON DELETE CASCADE,
+    FOREIGN KEY(evidence_id) REFERENCES evidence(evidence_id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_evidence_type ON evidence(evidence_type);
+CREATE INDEX IF NOT EXISTS idx_evidence_strength ON evidence(strength_status);
+CREATE INDEX IF NOT EXISTS idx_evidence_document ON evidence(document_id);
+CREATE INDEX IF NOT EXISTS idx_evidence_date ON evidence(evidence_date);
+CREATE INDEX IF NOT EXISTS idx_claim_evidence_claim ON claim_evidence(claim_id);
+CREATE INDEX IF NOT EXISTS idx_claim_evidence_evidence ON claim_evidence(evidence_id);
+"""
 
 
 def _utc_now() -> str:
@@ -38,8 +70,10 @@ class ProjectInfo:
 
 
 class ProjectManager:
-    def __init__(self, paths: AppPaths | None = None) -> None:
-        self.paths = paths or resolve_app_paths()
+    def __init__(self, paths: AppPaths | None = None, *, home: str | Path | None = None) -> None:
+        if paths is not None and home is not None:
+            raise ValueError("Provide paths or home, not both")
+        self.paths = paths or (AppPaths(home=Path(home)).ensure() if home is not None else resolve_app_paths())
 
     def create_project(self, name: str) -> ProjectInfo:
         clean_name = name.strip()
@@ -80,6 +114,11 @@ class ProjectManager:
             (root / folder).mkdir(exist_ok=True)
         if not database_path.exists():
             self._initialize_database(database_path, manifest["project_id"], manifest["name"], manifest["created_at"])
+        self._migrate_database(database_path)
+        if int(manifest.get("schema_version", 1)) < SCHEMA_VERSION:
+            manifest["schema_version"] = SCHEMA_VERSION
+            manifest["updated_at"] = _utc_now()
+            self._write_json(manifest_path, manifest)
         info = ProjectInfo(
             project_id=str(manifest["project_id"]),
             name=str(manifest["name"]),
@@ -155,5 +194,17 @@ class ProjectManager:
             connection.execute(
                 "INSERT OR REPLACE INTO project_metadata(project_id, name, created_at, updated_at) VALUES(?, ?, ?, ?)",
                 (project_id, name, created_at, _utc_now()),
+            )
+            connection.commit()
+
+    @staticmethod
+    def _migrate_database(path: Path) -> None:
+        """Apply project migrations safely; every statement is idempotent."""
+        with sqlite3.connect(path) as connection:
+            connection.execute("PRAGMA foreign_keys = ON")
+            connection.executescript(EVIDENCE_SCHEMA)
+            connection.execute(
+                "INSERT OR REPLACE INTO schema_metadata(key, value) VALUES('schema_version', ?)",
+                (str(SCHEMA_VERSION),),
             )
             connection.commit()
