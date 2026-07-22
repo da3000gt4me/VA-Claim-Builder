@@ -104,6 +104,16 @@ class JobManager:
                     "WHERE status='pending' AND job_id IN (SELECT job_id FROM jobs WHERE status='interrupted')",
                     (_utc_now(),),
                 )
+            timeline_table = connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='timeline_extractions'"
+            ).fetchone()
+            if timeline_table:
+                connection.execute(
+                    "UPDATE timeline_extractions SET status='failed', "
+                    "error_message='Application closed before extraction completed', completed_at=? "
+                    "WHERE status='pending' AND job_id IN (SELECT job_id FROM jobs WHERE status='interrupted')",
+                    (_utc_now(),),
+                )
             connection.commit()
             return cursor.rowcount
 

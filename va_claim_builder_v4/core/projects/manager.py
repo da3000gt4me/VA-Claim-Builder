@@ -13,7 +13,7 @@ from typing import Any
 from .paths import AppPaths, resolve_app_paths
 
 PROJECT_FOLDERS = ("uploads", "ocr", "ai", "evidence", "timeline", "reports", "cache", "logs", "temp")
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 
 EVIDENCE_SCHEMA = """
@@ -71,6 +71,44 @@ CREATE TABLE IF NOT EXISTS evidence_analyses (
 CREATE INDEX IF NOT EXISTS idx_evidence_analyses_evidence ON evidence_analyses(evidence_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_evidence_analyses_status ON evidence_analyses(status);
 CREATE INDEX IF NOT EXISTS idx_evidence_analyses_job ON evidence_analyses(job_id);
+"""
+
+TIMELINE_SCHEMA = """
+CREATE TABLE IF NOT EXISTS medical_timeline_events (
+ event_id TEXT PRIMARY KEY, event_date TEXT NOT NULL DEFAULT '', end_date TEXT NOT NULL DEFAULT '',
+ date_precision TEXT NOT NULL DEFAULT 'unknown', event_type TEXT NOT NULL DEFAULT 'other',
+ title TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', provider_facility TEXT NOT NULL DEFAULT '',
+ body_system_condition TEXT NOT NULL DEFAULT '', document_id TEXT, evidence_id TEXT,
+ treatment TEXT NOT NULL DEFAULT '', diagnosis TEXT NOT NULL DEFAULT '', symptoms_json TEXT NOT NULL DEFAULT '[]',
+ medications_json TEXT NOT NULL DEFAULT '[]', testing_imaging TEXT NOT NULL DEFAULT '',
+ functional_impact TEXT NOT NULL DEFAULT '', service_period_relevance TEXT NOT NULL DEFAULT '',
+ notes TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+ FOREIGN KEY(document_id) REFERENCES documents(document_id) ON DELETE SET NULL,
+ FOREIGN KEY(evidence_id) REFERENCES evidence(evidence_id) ON DELETE SET NULL
+);
+CREATE TABLE IF NOT EXISTS timeline_event_claims (
+ event_id TEXT NOT NULL, claim_id TEXT NOT NULL, linked_at TEXT NOT NULL,
+ PRIMARY KEY(event_id,claim_id),
+ FOREIGN KEY(event_id) REFERENCES medical_timeline_events(event_id) ON DELETE CASCADE,
+ FOREIGN KEY(claim_id) REFERENCES claims(claim_id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS timeline_extractions (
+ extraction_id TEXT PRIMARY KEY, job_id TEXT, status TEXT NOT NULL DEFAULT 'pending', provider TEXT NOT NULL DEFAULT '',
+ model TEXT NOT NULL DEFAULT '', redaction_applied INTEGER NOT NULL DEFAULT 0, error_message TEXT NOT NULL DEFAULT '',
+ created_at TEXT NOT NULL, completed_at TEXT
+);
+CREATE TABLE IF NOT EXISTS timeline_candidates (
+ candidate_id TEXT PRIMARY KEY, extraction_id TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending',
+ event_json TEXT NOT NULL, document_id TEXT, evidence_id TEXT, merged_into_candidate_id TEXT,
+ created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+ FOREIGN KEY(extraction_id) REFERENCES timeline_extractions(extraction_id) ON DELETE CASCADE,
+ FOREIGN KEY(document_id) REFERENCES documents(document_id) ON DELETE SET NULL,
+ FOREIGN KEY(evidence_id) REFERENCES evidence(evidence_id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS idx_medical_timeline_date ON medical_timeline_events(event_date,event_id);
+CREATE INDEX IF NOT EXISTS idx_medical_timeline_type ON medical_timeline_events(event_type);
+CREATE INDEX IF NOT EXISTS idx_timeline_event_claim ON timeline_event_claims(claim_id,event_id);
+CREATE INDEX IF NOT EXISTS idx_timeline_candidate_status ON timeline_candidates(status,created_at);
 """
 
 
@@ -236,6 +274,7 @@ class ProjectManager:
             connection.execute("CREATE INDEX IF NOT EXISTS idx_evidence_review_status ON evidence(review_status)")
             connection.execute("CREATE INDEX IF NOT EXISTS idx_evidence_duplicate ON evidence(duplicate_of_evidence_id)")
             connection.executescript(EVIDENCE_ANALYSIS_SCHEMA)
+            connection.executescript(TIMELINE_SCHEMA)
             connection.execute(
                 "INSERT OR REPLACE INTO schema_metadata(key, value) VALUES('schema_version', ?)",
                 (str(SCHEMA_VERSION),),

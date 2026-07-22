@@ -6,7 +6,7 @@ from pathlib import Path
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication, QMessageBox
+from PySide6.QtWidgets import QApplication, QMessageBox, QPushButton
 
 from core.claims import ClaimManager
 from core.evidence import EvidenceManager
@@ -15,6 +15,7 @@ from core.ai.types import AIResponse
 from core.settings import AISettings, SettingsManager
 from core.projects import AppPaths, ProjectManager
 from ui_qt.evidence_page import EvidencePage
+from ui_qt.timeline_page import TimelinePage
 from ui_qt.main_window import MainWindow
 
 
@@ -26,7 +27,7 @@ def test_evidence_workspace_is_integrated_into_main_window(tmp_path: Path, monke
     window = MainWindow(project)
 
     labels = [window.tabs.tabText(index) for index in range(window.tabs.count())]
-    assert labels == ["Documents", "OCR & Text", "Claims", "Evidence", "Settings"]
+    assert labels == ["Documents", "OCR & Text", "Claims", "Evidence", "Medical Timeline", "Settings"]
     assert window.evidence_page.table.rowCount() == 0
     assert window.evidence_page.empty_message.text() == "No evidence has been added to this project yet."
     window.close()
@@ -58,6 +59,19 @@ def test_evidence_review_controls_save_status_and_claim_note(tmp_path: Path) -> 
     assert page.status_filter.count() == 6
     assert page.ocr_filter.count() == 6
     page.close(); app.processEvents()
+
+
+def test_medical_timeline_navigation_editing_filters_and_controls(tmp_path: Path) -> None:
+    app = QApplication.instance() or QApplication([]); root=tmp_path/"app";project=ProjectManager(AppPaths(root=root).ensure()).create_project("UI Timeline")
+    ClaimManager(project).create("Back condition");page=TimelinePage(project)
+    page.title.setText("Initial evaluation");page.event_date.setText("2022-01-03");page.event_type.setCurrentText("diagnosis");page.provider.setText("VA Clinic");page.description.setPlainText("Evaluation confirmed back pain");page.save()
+    assert page.table.rowCount()==1 and "Initial evaluation" in page.narrative.toPlainText()
+    page.provider_filter.setText("Other");app.processEvents();assert page.table.rowCount()==0
+    page.provider_filter.setText("VA");app.processEvents();assert page.table.rowCount()==1
+    button_texts={button.text() for button in page.findChildren(QPushButton)}
+    assert {"Extract Checked Evidence","Extract Document","Cancel Extraction","Accept Candidate","Reject Candidate","Save Accepted Events","Export CSV…"}<=button_texts
+    assert page.tabs.tabText(0)=="Structured Table" and page.tabs.tabText(1)=="Narrative" and page.tabs.tabText(2)=="Candidate Review"
+    page.close();app.processEvents()
 
 
 def test_ai_analysis_controls_display_history_and_advisory_result(tmp_path: Path, monkeypatch) -> None:
