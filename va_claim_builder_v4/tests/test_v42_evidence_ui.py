@@ -18,6 +18,7 @@ from ui_qt.evidence_page import EvidencePage
 from ui_qt.timeline_page import TimelinePage
 from ui_qt.nexus_page import NexusPage
 from ui_qt.dbq_page import DBQPage
+from ui_qt.rating_strategy_page import RatingStrategyPage
 from ui_qt.main_window import MainWindow
 
 
@@ -29,7 +30,7 @@ def test_evidence_workspace_is_integrated_into_main_window(tmp_path: Path, monke
     window = MainWindow(project)
 
     labels = [window.tabs.tabText(index) for index in range(window.tabs.count())]
-    assert labels == ["Documents", "OCR & Text", "Claims", "Evidence", "Medical Timeline", "Nexus Letters", "DBQ Assistant", "Settings"]
+    assert labels == ["Documents", "OCR & Text", "Claims", "Evidence", "Medical Timeline", "Nexus Letters", "DBQ Assistant", "Rating Strategy", "Settings"]
     assert window.evidence_page.table.rowCount() == 0
     assert window.evidence_page.empty_message.text() == "No evidence has been added to this project yet."
     window.close()
@@ -91,6 +92,12 @@ def test_dbq_navigation_template_edit_sources_completeness_and_controls(tmp_path
     assert page.table.rowCount()==1 and page.revisions.rowCount()==1 and page.manager.get(page.current_id).evidence_ids==(e.evidence_id,);assert page.field_widgets["prostrating_attacks"].isReadOnly();assert "Score:" in page.completeness.toPlainText()
     buttons={b.text() for b in page.findChildren(QPushButton)};assert {"Create DBQ Work Product","Save Manual Edits","Duplicate","Delete","Export DOCX…","Generate AI Suggestions","Cancel Generation","Accept Suggestion","Reject Suggestion"}<=buttons
     assert [page.tabs.tabText(i) for i in range(page.tabs.count())]==["DBQ Editor","Sources & Suggestions","Completeness & Revisions"];page.close();app.processEvents()
+
+
+def test_rating_strategy_navigation_history_filters_and_sections(tmp_path: Path) -> None:
+    app=QApplication.instance() or QApplication([]);root=tmp_path/"app";project=ProjectManager(AppPaths(root=root).ensure()).create_project("UI Rating");claim=ClaimManager(project).create("Migraines");page=RatingStrategyPage(project);record=page.manager.create(claim.claim_id,status="completed",confidence="medium",estimated_rating_range="10%–30% preliminary",strengths=["Diagnosis documented"],missing_evidence=["Occupational impact"],recommended_actions=["Add headache log"]);page.refresh();page.history.selectRow(0);app.processEvents()
+    assert page.history.rowCount()==1 and "10%–30%" in page.summary.text() and "Diagnosis documented" in page.sections["strengths"].toPlainText();assert page.claim_filter.count()==2 and page.status_filter.count()==5
+    buttons={b.text() for b in page.findChildren(QPushButton)};assert {"Analyze Selected Claim","Analyze Filtered Claims","Cancel Analysis","Refresh"}<=buttons;assert set(page.sections)=={"strengths","weaknesses","missing_evidence","contradictory_evidence","recommended_actions","supporting_evidence","secondary_opportunities","aggravation_opportunities","presumptive_opportunities","generated_reasoning"};page.close();app.processEvents()
 
 
 def test_ai_analysis_controls_display_history_and_advisory_result(tmp_path: Path, monkeypatch) -> None:

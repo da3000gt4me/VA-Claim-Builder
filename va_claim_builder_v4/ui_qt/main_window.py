@@ -12,6 +12,7 @@ from ui_qt.settings_page import SettingsPage
 from ui_qt.timeline_page import TimelinePage
 from ui_qt.nexus_page import NexusPage
 from ui_qt.dbq_page import DBQPage
+from ui_qt.rating_strategy_page import RatingStrategyPage
 
 
 class MainWindow(QMainWindow):
@@ -29,6 +30,7 @@ class MainWindow(QMainWindow):
         self.timeline_page = TimelinePage(project)
         self.nexus_page = NexusPage(project)
         self.dbq_page = DBQPage(project)
+        self.rating_strategy_page = RatingStrategyPage(project)
         self.settings_page = SettingsPage()
         self.settings_page.settings_saved.connect(
             lambda: self.statusBar().showMessage("AI settings saved", 3000)
@@ -40,6 +42,7 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.timeline_page, "Medical Timeline")
         self.tabs.addTab(self.nexus_page, "Nexus Letters")
         self.tabs.addTab(self.dbq_page, "DBQ Assistant")
+        self.tabs.addTab(self.rating_strategy_page, "Rating Strategy")
         self.tabs.addTab(self.settings_page, "Settings")
         self.setCentralWidget(self.tabs)
 
@@ -73,6 +76,10 @@ class MainWindow(QMainWindow):
         dbq_action = QAction("Open DBQ Assistant", self)
         dbq_action.triggered.connect(lambda: self.tabs.setCurrentWidget(self.dbq_page))
         dbq_menu.addAction(dbq_action)
+        rating_menu = self.menuBar().addMenu("Rating Strategy")
+        rating_action = QAction("Open Rating Strategy", self)
+        rating_action.triggered.connect(lambda: self.tabs.setCurrentWidget(self.rating_strategy_page))
+        rating_menu.addAction(rating_action)
 
         settings_menu = self.menuBar().addMenu("Settings")
         ai_settings_action = QAction("AI & Privacy Settings", self)
@@ -93,6 +100,7 @@ class MainWindow(QMainWindow):
         self.timeline_page.refresh()
         self.nexus_page.refresh()
         self.dbq_page.refresh()
+        self.rating_strategy_page.refresh()
         self.settings_page.load()
         self.statusBar().showMessage("Workspace refreshed", 3000)
 

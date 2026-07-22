@@ -13,7 +13,7 @@ from typing import Any
 from .paths import AppPaths, resolve_app_paths
 
 PROJECT_FOLDERS = ("uploads", "ocr", "ai", "evidence", "timeline", "reports", "cache", "logs", "temp")
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 
 EVIDENCE_SCHEMA = """
@@ -145,6 +145,13 @@ CREATE INDEX IF NOT EXISTS idx_dbq_claim ON dbq_records(claim_id,status);
 CREATE INDEX IF NOT EXISTS idx_dbq_template ON dbq_records(template_id);
 CREATE INDEX IF NOT EXISTS idx_dbq_revisions ON dbq_revisions(dbq_id,revision_number DESC);
 CREATE INDEX IF NOT EXISTS idx_dbq_generation_job ON dbq_generations(job_id,status);
+"""
+
+RATING_STRATEGY_SCHEMA = """
+CREATE TABLE IF NOT EXISTS rating_strategies (strategy_id TEXT PRIMARY KEY,claim_id TEXT NOT NULL,job_id TEXT,status TEXT NOT NULL DEFAULT 'pending',analysis_timestamp TEXT NOT NULL,analysis_version TEXT NOT NULL,confidence TEXT NOT NULL DEFAULT 'low',diagnostic_codes_json TEXT NOT NULL DEFAULT '[]',estimated_rating_range TEXT NOT NULL DEFAULT '',supporting_evidence_json TEXT NOT NULL DEFAULT '[]',contradictory_evidence_json TEXT NOT NULL DEFAULT '[]',missing_evidence_json TEXT NOT NULL DEFAULT '[]',recommended_actions_json TEXT NOT NULL DEFAULT '[]',secondary_opportunities_json TEXT NOT NULL DEFAULT '[]',aggravation_opportunities_json TEXT NOT NULL DEFAULT '[]',presumptive_opportunities_json TEXT NOT NULL DEFAULT '[]',strengths_json TEXT NOT NULL DEFAULT '[]',weaknesses_json TEXT NOT NULL DEFAULT '[]',generated_reasoning TEXT NOT NULL DEFAULT '',ai_metadata_json TEXT NOT NULL DEFAULT '{}',error_message TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL,updated_at TEXT NOT NULL,FOREIGN KEY(claim_id) REFERENCES claims(claim_id) ON DELETE CASCADE);
+CREATE INDEX IF NOT EXISTS idx_rating_strategy_claim ON rating_strategies(claim_id,analysis_timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_rating_strategy_status ON rating_strategies(status);
+CREATE INDEX IF NOT EXISTS idx_rating_strategy_job ON rating_strategies(job_id,status);
 """
 
 
@@ -313,6 +320,7 @@ class ProjectManager:
             connection.executescript(TIMELINE_SCHEMA)
             connection.executescript(NEXUS_SCHEMA)
             connection.executescript(DBQ_SCHEMA)
+            connection.executescript(RATING_STRATEGY_SCHEMA)
             connection.execute(
                 "INSERT OR REPLACE INTO schema_metadata(key, value) VALUES('schema_version', ?)",
                 (str(SCHEMA_VERSION),),
