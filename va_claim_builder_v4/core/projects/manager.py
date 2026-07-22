@@ -13,7 +13,7 @@ from typing import Any
 from .paths import AppPaths, resolve_app_paths
 
 PROJECT_FOLDERS = ("uploads", "ocr", "ai", "evidence", "timeline", "reports", "cache", "logs", "temp")
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 
 EVIDENCE_SCHEMA = """
@@ -132,6 +132,19 @@ CREATE TABLE IF NOT EXISTS nexus_generations (generation_id TEXT PRIMARY KEY,let
 CREATE INDEX IF NOT EXISTS idx_nexus_claim ON nexus_letters(claim_id,status);
 CREATE INDEX IF NOT EXISTS idx_nexus_versions ON nexus_letter_versions(letter_id,version_number DESC);
 CREATE INDEX IF NOT EXISTS idx_nexus_generation_job ON nexus_generations(job_id,status);
+"""
+
+DBQ_SCHEMA = """
+CREATE TABLE IF NOT EXISTS dbq_records (dbq_id TEXT PRIMARY KEY,claim_id TEXT NOT NULL,template_id TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'draft',title TEXT NOT NULL,condition TEXT NOT NULL DEFAULT '',exam_date TEXT NOT NULL DEFAULT '',examiner_name TEXT NOT NULL DEFAULT '',examiner_credentials TEXT NOT NULL DEFAULT '',specialty TEXT NOT NULL DEFAULT '',revision_number INTEGER NOT NULL DEFAULT 1,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,FOREIGN KEY(claim_id) REFERENCES claims(claim_id) ON DELETE RESTRICT);
+CREATE TABLE IF NOT EXISTS dbq_revisions (revision_id TEXT PRIMARY KEY,dbq_id TEXT NOT NULL,revision_number INTEGER NOT NULL,fields_json TEXT NOT NULL,suggestions_json TEXT NOT NULL DEFAULT '[]',ai_metadata_json TEXT NOT NULL DEFAULT '{}',created_at TEXT NOT NULL,UNIQUE(dbq_id,revision_number),FOREIGN KEY(dbq_id) REFERENCES dbq_records(dbq_id) ON DELETE CASCADE);
+CREATE TABLE IF NOT EXISTS dbq_evidence (dbq_id TEXT NOT NULL,evidence_id TEXT NOT NULL,linked_at TEXT NOT NULL,PRIMARY KEY(dbq_id,evidence_id),FOREIGN KEY(dbq_id) REFERENCES dbq_records(dbq_id) ON DELETE CASCADE,FOREIGN KEY(evidence_id) REFERENCES evidence(evidence_id) ON DELETE CASCADE);
+CREATE TABLE IF NOT EXISTS dbq_timeline (dbq_id TEXT NOT NULL,event_id TEXT NOT NULL,linked_at TEXT NOT NULL,PRIMARY KEY(dbq_id,event_id),FOREIGN KEY(dbq_id) REFERENCES dbq_records(dbq_id) ON DELETE CASCADE,FOREIGN KEY(event_id) REFERENCES medical_timeline_events(event_id) ON DELETE CASCADE);
+CREATE TABLE IF NOT EXISTS dbq_documents (dbq_id TEXT NOT NULL,document_id TEXT NOT NULL,linked_at TEXT NOT NULL,PRIMARY KEY(dbq_id,document_id),FOREIGN KEY(dbq_id) REFERENCES dbq_records(dbq_id) ON DELETE CASCADE,FOREIGN KEY(document_id) REFERENCES documents(document_id) ON DELETE CASCADE);
+CREATE TABLE IF NOT EXISTS dbq_generations (generation_id TEXT PRIMARY KEY,dbq_id TEXT NOT NULL,job_id TEXT,status TEXT NOT NULL DEFAULT 'pending',provider TEXT NOT NULL DEFAULT '',model TEXT NOT NULL DEFAULT '',redaction_applied INTEGER NOT NULL DEFAULT 0,error_message TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL,completed_at TEXT,FOREIGN KEY(dbq_id) REFERENCES dbq_records(dbq_id) ON DELETE CASCADE);
+CREATE INDEX IF NOT EXISTS idx_dbq_claim ON dbq_records(claim_id,status);
+CREATE INDEX IF NOT EXISTS idx_dbq_template ON dbq_records(template_id);
+CREATE INDEX IF NOT EXISTS idx_dbq_revisions ON dbq_revisions(dbq_id,revision_number DESC);
+CREATE INDEX IF NOT EXISTS idx_dbq_generation_job ON dbq_generations(job_id,status);
 """
 
 
@@ -299,6 +312,7 @@ class ProjectManager:
             connection.executescript(EVIDENCE_ANALYSIS_SCHEMA)
             connection.executescript(TIMELINE_SCHEMA)
             connection.executescript(NEXUS_SCHEMA)
+            connection.executescript(DBQ_SCHEMA)
             connection.execute(
                 "INSERT OR REPLACE INTO schema_metadata(key, value) VALUES('schema_version', ?)",
                 (str(SCHEMA_VERSION),),

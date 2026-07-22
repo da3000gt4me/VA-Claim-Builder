@@ -17,6 +17,7 @@ from core.projects import AppPaths, ProjectManager
 from ui_qt.evidence_page import EvidencePage
 from ui_qt.timeline_page import TimelinePage
 from ui_qt.nexus_page import NexusPage
+from ui_qt.dbq_page import DBQPage
 from ui_qt.main_window import MainWindow
 
 
@@ -28,7 +29,7 @@ def test_evidence_workspace_is_integrated_into_main_window(tmp_path: Path, monke
     window = MainWindow(project)
 
     labels = [window.tabs.tabText(index) for index in range(window.tabs.count())]
-    assert labels == ["Documents", "OCR & Text", "Claims", "Evidence", "Medical Timeline", "Nexus Letters", "Settings"]
+    assert labels == ["Documents", "OCR & Text", "Claims", "Evidence", "Medical Timeline", "Nexus Letters", "DBQ Assistant", "Settings"]
     assert window.evidence_page.table.rowCount() == 0
     assert window.evidence_page.empty_message.text() == "No evidence has been added to this project yet."
     window.close()
@@ -83,6 +84,13 @@ def test_nexus_navigation_creation_sources_revisions_and_controls(tmp_path: Path
     assert {"Create Draft","Save Manual Edits","Duplicate Draft","Delete","Export DOCX…","Generate AI-assisted Draft","Cancel Generation"}<=buttons
     assert [page.tabs.tabText(i) for i in range(page.tabs.count())]==["Draft Editor","Sources & AI Generation","Revision History"]
     page.close();app.processEvents()
+
+
+def test_dbq_navigation_template_edit_sources_completeness_and_controls(tmp_path: Path) -> None:
+    app=QApplication.instance() or QApplication([]);root=tmp_path/"app";project=ProjectManager(AppPaths(root=root).ensure()).create_project("UI DBQ");ClaimManager(project).create("Migraines");e=EvidenceManager(project).create("Headache diary");page=DBQPage(project);page.template.setCurrentIndex(page.template.findData("headaches_migraines"));page.title.setText("Migraine preparation");page.condition.setText("Migraines");page.field_widgets["claimant_reported_symptoms"].setPlainText("Weekly headaches");page.evidence_sources.item(0).setCheckState(Qt.CheckState.Checked);page.save()
+    assert page.table.rowCount()==1 and page.revisions.rowCount()==1 and page.manager.get(page.current_id).evidence_ids==(e.evidence_id,);assert page.field_widgets["prostrating_attacks"].isReadOnly();assert "Score:" in page.completeness.toPlainText()
+    buttons={b.text() for b in page.findChildren(QPushButton)};assert {"Create DBQ Work Product","Save Manual Edits","Duplicate","Delete","Export DOCX…","Generate AI Suggestions","Cancel Generation","Accept Suggestion","Reject Suggestion"}<=buttons
+    assert [page.tabs.tabText(i) for i in range(page.tabs.count())]==["DBQ Editor","Sources & Suggestions","Completeness & Revisions"];page.close();app.processEvents()
 
 
 def test_ai_analysis_controls_display_history_and_advisory_result(tmp_path: Path, monkeypatch) -> None:

@@ -124,6 +124,16 @@ class JobManager:
                     "WHERE status='pending' AND job_id IN (SELECT job_id FROM jobs WHERE status='interrupted')",
                     (_utc_now(),),
                 )
+            dbq_table = connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='dbq_generations'"
+            ).fetchone()
+            if dbq_table:
+                connection.execute(
+                    "UPDATE dbq_generations SET status='failed', "
+                    "error_message='Application closed before DBQ preparation completed', completed_at=? "
+                    "WHERE status='pending' AND job_id IN (SELECT job_id FROM jobs WHERE status='interrupted')",
+                    (_utc_now(),),
+                )
             connection.commit()
             return cursor.rowcount
 
