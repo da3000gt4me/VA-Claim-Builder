@@ -9,6 +9,7 @@ from ui_qt.documents_page import DocumentsPage
 from ui_qt.evidence_page import EvidencePage
 from ui_qt.ocr_page import OCRPage
 from ui_qt.settings_page import SettingsPage
+from ui_qt.timeline_page import TimelinePage
 
 
 class MainWindow(QMainWindow):
@@ -23,6 +24,7 @@ class MainWindow(QMainWindow):
         self.ocr_page = OCRPage(project)
         self.claims_page = ClaimsPage(project)
         self.evidence_page = EvidencePage(project)
+        self.timeline_page = TimelinePage(project)
         self.settings_page = SettingsPage()
         self.settings_page.settings_saved.connect(
             lambda: self.statusBar().showMessage("AI settings saved", 3000)
@@ -31,6 +33,7 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.ocr_page, "OCR & Text")
         self.tabs.addTab(self.claims_page, "Claims")
         self.tabs.addTab(self.evidence_page, "Evidence")
+        self.tabs.addTab(self.timeline_page, "Medical Timeline")
         self.tabs.addTab(self.settings_page, "Settings")
         self.setCentralWidget(self.tabs)
 
@@ -52,6 +55,10 @@ class MainWindow(QMainWindow):
         evidence_action = QAction("Open Evidence Workspace", self)
         evidence_action.triggered.connect(lambda: self.tabs.setCurrentWidget(self.evidence_page))
         evidence_menu.addAction(evidence_action)
+        timeline_menu = self.menuBar().addMenu("Timeline")
+        timeline_action = QAction("Open Medical Timeline", self)
+        timeline_action.triggered.connect(lambda: self.tabs.setCurrentWidget(self.timeline_page))
+        timeline_menu.addAction(timeline_action)
 
         settings_menu = self.menuBar().addMenu("Settings")
         ai_settings_action = QAction("AI & Privacy Settings", self)
@@ -69,6 +76,7 @@ class MainWindow(QMainWindow):
         self.ocr_page.refresh()
         self.claims_page.refresh()
         self.evidence_page.refresh()
+        self.timeline_page.refresh()
         self.settings_page.load()
         self.statusBar().showMessage("Workspace refreshed", 3000)
 
