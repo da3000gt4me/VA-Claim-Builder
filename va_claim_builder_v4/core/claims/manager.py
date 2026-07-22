@@ -40,6 +40,11 @@ class ClaimManager:
         self.project = project
         self._ensure_schema()
 
+    def _connect(self) -> sqlite3.Connection:
+        connection = sqlite3.connect(self.project.database_path)
+        connection.execute("PRAGMA foreign_keys = ON")
+        return connection
+
     def create(
         self,
         condition_name: str,
@@ -59,7 +64,7 @@ class ClaimManager:
         self._validate(claim_type, status)
         now = _utc_now()
         claim_id = str(uuid.uuid4())
-        with sqlite3.connect(self.project.database_path) as connection:
+        with self._connect() as connection:
             next_order = connection.execute(
                 "SELECT COALESCE(MAX(sort_order), -1) + 1 FROM claims"
             ).fetchone()[0]
@@ -102,7 +107,7 @@ class ClaimManager:
         values["sort_order"] = int(values["sort_order"])
         assignments = ", ".join(f"{field} = ?" for field in sorted(allowed))
         params = [values[field] for field in sorted(allowed)] + [_utc_now(), claim_id]
-        with sqlite3.connect(self.project.database_path) as connection:
+        with self._connect() as connection:
             connection.execute(
                 f"UPDATE claims SET {assignments}, updated_at = ? WHERE claim_id = ?",
                 params,
@@ -111,7 +116,7 @@ class ClaimManager:
         return self.get(claim_id)
 
     def get(self, claim_id: str) -> ClaimInfo:
-        with sqlite3.connect(self.project.database_path) as connection:
+        with self._connect() as connection:
             row = connection.execute(
                 """
                 SELECT claim_id, condition_name, claim_type, secondary_to, status,
@@ -126,7 +131,7 @@ class ClaimManager:
         return ClaimInfo(*row)
 
     def list_claims(self) -> list[ClaimInfo]:
-        with sqlite3.connect(self.project.database_path) as connection:
+        with self._connect() as connection:
             rows = connection.execute(
                 """
                 SELECT claim_id, condition_name, claim_type, secondary_to, status,
@@ -138,7 +143,7 @@ class ClaimManager:
         return [ClaimInfo(*row) for row in rows]
 
     def delete(self, claim_id: str) -> None:
-        with sqlite3.connect(self.project.database_path) as connection:
+        with self._connect() as connection:
             cursor = connection.execute("DELETE FROM claims WHERE claim_id = ?", (claim_id,))
             if cursor.rowcount == 0:
                 raise KeyError(claim_id)
@@ -154,7 +159,7 @@ class ClaimManager:
         if target == index:
             return
         claims[index], claims[target] = claims[target], claims[index]
-        with sqlite3.connect(self.project.database_path) as connection:
+        with self._connect() as connection:
             connection.executemany(
                 "UPDATE claims SET sort_order = ?, updated_at = ? WHERE claim_id = ?",
                 [(position, _utc_now(), claim.claim_id) for position, claim in enumerate(claims)],
@@ -163,7 +168,7 @@ class ClaimManager:
 
     def normalize_sort_order(self) -> None:
         claims = self.list_claims()
-        with sqlite3.connect(self.project.database_path) as connection:
+        with self._connect() as connection:
             connection.executemany(
                 "UPDATE claims SET sort_order = ? WHERE claim_id = ?",
                 [(position, claim.claim_id) for position, claim in enumerate(claims)],
@@ -178,7 +183,7 @@ class ClaimManager:
             raise ValueError(f"Unsupported claim status: {status}")
 
     def _ensure_schema(self) -> None:
-        with sqlite3.connect(self.project.database_path) as connection:
+        with self._connect() as connection:
             connection.executescript(
                 """
                 CREATE TABLE IF NOT EXISTS claims (
