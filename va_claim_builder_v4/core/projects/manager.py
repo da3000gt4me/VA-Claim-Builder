@@ -242,7 +242,23 @@ class ProjectManager:
             (root / folder).mkdir(exist_ok=True)
         if not database_path.exists():
             self._initialize_database(database_path, manifest["project_id"], manifest["name"], manifest["created_at"])
-        self._migrate_database(database_path)
+        migration_backup: Path | None = None
+        try:
+            current_version = self._schema_version(database_path)
+            if current_version > SCHEMA_VERSION:
+                raise ValueError(
+                    f"Project schema {current_version} is newer than supported schema {SCHEMA_VERSION}."
+                )
+            if current_version < SCHEMA_VERSION:
+                migration_backup = self._backup_before_migration(database_path, manifest["project_id"])
+            self._migrate_database(database_path)
+            with sqlite3.connect(database_path) as connection:
+                if connection.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
+                    raise sqlite3.DatabaseError("Database integrity check failed after migration")
+        except Exception:
+            if migration_backup is not None and migration_backup.is_file():
+                shutil.copy2(migration_backup, database_path)
+            raise
         if int(manifest.get("schema_version", 1)) < SCHEMA_VERSION:
             manifest["schema_version"] = SCHEMA_VERSION
             manifest["updated_at"] = _utc_now()
@@ -344,11 +360,47 @@ class ProjectManager:
             connection.executescript(RATING_STRATEGY_SCHEMA)
             connection.executescript(OPTIMIZER_SCHEMA)
             connection.executescript(SUBMISSION_SCHEMA)
+            connection.executescript(
+                """
+                CREATE INDEX IF NOT EXISTS idx_evidence_updated ON evidence(updated_at DESC, evidence_id);
+                """
+            )
             connection.execute(
                 "INSERT OR REPLACE INTO schema_metadata(key, value) VALUES('schema_version', ?)",
                 (str(SCHEMA_VERSION),),
             )
             connection.commit()
+
+    @staticmethod
+    def _schema_version(path: Path) -> int:
+        try:
+            with sqlite3.connect(path) as connection:
+                row = connection.execute(
+                    "SELECT value FROM schema_metadata WHERE key='schema_version'"
+                ).fetchone()
+        except sqlite3.Error as exc:
+            raise ValueError("The project database cannot be read safely.") from exc
+        if row is None:
+            return 1
+        try:
+            return int(row[0])
+        except (TypeError, ValueError) as exc:
+            raise ValueError("The project database has an invalid schema version.") from exc
+
+    def _backup_before_migration(self, database_path: Path, project_id: str) -> Path:
+        self.paths.backups.mkdir(parents=True, exist_ok=True)
+        destination = self.paths.backups / (
+            f"migration-{project_id}-{datetime.now():%Y%m%d-%H%M%S-%f}.db"
+        )
+        temp = destination.with_suffix(".incomplete")
+        try:
+            with sqlite3.connect(database_path) as source, sqlite3.connect(temp) as target:
+                source.backup(target)
+            temp.replace(destination)
+            return destination
+        except Exception:
+            temp.unlink(missing_ok=True)
+            raise
 
     @staticmethod
     def _add_column(connection: sqlite3.Connection, table: str, column: str, definition: str) -> None:

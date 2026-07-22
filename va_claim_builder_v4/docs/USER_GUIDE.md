@@ -1,22 +1,29 @@
-# VA Claim Builder 4.0 Stable — User Guide
+# User Guide — Version 4.2.0 RC1
 
-## AI setup
+## Projects and documents
 
-The application does not sign in to the consumer ChatGPT or Grok websites. Cloud analysis uses API credentials:
+Create or open a project from the welcome screen. A project is a local folder containing `manifest.json`, `project.db`, source uploads, OCR artifacts, generated reports, and temporary work areas. Import documents without modifying originals. The OCR workspace records pending, completed, failed, cancelled, and no-text outcomes.
 
-- `OPENAI_API_KEY` for OpenAI models
-- `XAI_API_KEY` for Grok models
+## Claims and evidence
 
-Consumer subscriptions and API billing are separate. Copy `.env.example` to `.env`, paste the keys, choose **Parallel multi-agent consensus**, and select both providers.
+Create claims, then create or review evidence and link it to one or more claims. Evidence review supports relevance states, reviewer notes, claim-specific relevance notes, duplicate references, OCR preview, search, and filtering. Links can be changed without deleting the evidence or its source document.
 
-## How ensemble analysis works
+## Advisory preparation workspaces
 
-1. The same redacted, page-labeled evidence packet is sent independently to each selected provider.
-2. Calls run concurrently.
-3. Findings are matched by proposition, claim element, polarity, filename, and page.
-4. Findings agreed upon by multiple independent agents are marked corroborated or consensus.
-5. One-agent findings remain in manual review.
-6. An optional adjudicator reviews only disputed structured findings and source quotations.
-7. No AI finding enters final drafting until approved by the user.
+Evidence Analyzer produces structured, historical advisory analyses. Medical Timeline stores confirmed chronological events and separately reviews AI-extracted candidates. Nexus Letters and DBQ Assistant create review drafts with source traceability and revision history; examiner-only measurements and findings are not invented. Rating Strategy estimates non-guaranteed ranges and identifies gaps or contradictions. Claim Optimizer turns those findings into readiness explanations and trackable actions. AI suggestions require confirmation.
 
-More agents do not automatically mean a stronger claim. Source evidence controls. The ensemble is intended to reduce omissions and expose disagreement, not manufacture support.
+## Submission Builder
+
+Create a package, select confirmed claims and sources, configure sections and exhibits, validate, then export. Blocking validation issues must be resolved or explicitly exported as an incomplete draft. Available outputs include a DOCX summary binder, DOCX/CSV evidence indexes, JSON manifest, companion files, ZIP, and consolidated PDF when source PDFs can be read safely. Originals are never modified.
+
+## AI and privacy
+
+Open Settings to choose OpenAI or xAI, select models, and enable Local-only or Redact-before-cloud. Local-only prevents cloud calls and needs no cloud credentials. Redaction is applied before provider invocation when enabled but cannot guarantee anonymity. Provider failures and malformed responses are recorded without logging medical content or secrets.
+
+## Backup, validation, and recovery
+
+Use the Project menu to create a checksum-validated backup, restore it into a new folder, validate the active project, apply listed safe repairs, or export sanitized diagnostics. Opening an older schema automatically creates a database backup before migration. On restart, interrupted job states are recovered and incomplete outputs are not presented as completed. Repair does not delete evidence.
+
+## Everyday safety
+
+Keep an independent backup before large imports or maintenance. Review every generated draft, confirm source citations, obtain required signatures and professional findings, and retain originals. Do not rely on scores, analyses, or package organization as advice or an outcome prediction.

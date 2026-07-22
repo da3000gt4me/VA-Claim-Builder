@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from PySide6.QtGui import QAction
-from PySide6.QtWidgets import QMainWindow, QMessageBox, QStatusBar, QTabWidget
+from PySide6.QtWidgets import QFileDialog, QMainWindow, QMessageBox, QStatusBar, QTabWidget
 
 from core.projects import ProjectInfo
 from ui_qt.claims_page import ClaimsPage
@@ -15,13 +15,17 @@ from ui_qt.dbq_page import DBQPage
 from ui_qt.rating_strategy_page import RatingStrategyPage
 from ui_qt.optimizer_page import OptimizerPage
 from ui_qt.submission_page import SubmissionPage
+from core.version import FULL_NAME
+from core.maintenance import MaintenanceError, ProjectMaintenance
+from core.jobs import JobManager
 
 
 class MainWindow(QMainWindow):
     def __init__(self, project: ProjectInfo) -> None:
         super().__init__()
         self.project = project
-        self.setWindowTitle(f"VA Claim Builder 4.2 — {project.name}")
+        self.maintenance = ProjectMaintenance(project)
+        self.setWindowTitle(f"{FULL_NAME} — {project.name}")
         self.resize(1180, 760)
 
         self.tabs = QTabWidget()
@@ -54,12 +58,27 @@ class MainWindow(QMainWindow):
 
         project_menu = self.menuBar().addMenu("Project")
         refresh_action = QAction("Refresh Workspace", self)
+        refresh_action.setShortcut("F5")
         refresh_action.triggered.connect(self._refresh_workspace)
         project_menu.addAction(refresh_action)
 
         project_info_action = QAction("Project Information", self)
         project_info_action.triggered.connect(self._show_project_information)
         project_menu.addAction(project_info_action)
+        project_menu.addSeparator()
+        backup_action = QAction("Create Backup…", self)
+        backup_action.setShortcut("Ctrl+B")
+        backup_action.triggered.connect(self._create_backup)
+        project_menu.addAction(backup_action)
+        restore_action = QAction("Restore Backup…", self)
+        restore_action.triggered.connect(self._restore_backup)
+        project_menu.addAction(restore_action)
+        validate_action = QAction("Validate and Repair Project…", self)
+        validate_action.triggered.connect(self._validate_project)
+        project_menu.addAction(validate_action)
+        diagnostics_action = QAction("Export Diagnostic Bundle…", self)
+        diagnostics_action.triggered.connect(self._export_diagnostics)
+        project_menu.addAction(diagnostics_action)
 
         claims_menu = self.menuBar().addMenu("Claims")
         claims_action = QAction("Open Claims Workspace", self)
@@ -102,6 +121,16 @@ class MainWindow(QMainWindow):
         )
         settings_menu.addAction(ai_settings_action)
 
+        help_menu = self.menuBar().addMenu("Help")
+        privacy_action = QAction("Privacy Summary", self)
+        privacy_action.triggered.connect(self._show_privacy)
+        help_menu.addAction(privacy_action)
+        about_action = QAction("About", self)
+        about_action.triggered.connect(
+            lambda: QMessageBox.about(self, "About VA Claim Builder", f"{FULL_NAME}\nRelease Candidate software for local testing.")
+        )
+        help_menu.addAction(about_action)
+
         status = QStatusBar()
         status.showMessage(f"Project loaded: {project.name}")
         self.setStatusBar(status)
@@ -131,3 +160,64 @@ class MainWindow(QMainWindow):
                 f"Created: {self.project.created_at}"
             ),
         )
+
+    def _create_backup(self) -> None:
+        destination = QFileDialog.getExistingDirectory(self, "Choose Backup Folder")
+        if not destination:
+            return
+        try:
+            path = self.maintenance.create_backup(destination)
+            QMessageBox.information(self, "Backup Complete", f"Validated backup created at:\n{path}")
+        except MaintenanceError as exc:
+            QMessageBox.critical(self, "Backup Failed", f"The project was not changed.\n\n{exc}")
+
+    def _restore_backup(self) -> None:
+        archive, _ = QFileDialog.getOpenFileName(self, "Choose Backup", filter="VA Claim Builder Backup (*.vcbbackup.zip *.zip)")
+        if not archive:
+            return
+        destination = QFileDialog.getExistingDirectory(self, "Choose Parent Folder for Restored Project")
+        if not destination:
+            return
+        try:
+            preview = self.maintenance.restore_preview(archive)
+            target = str(__import__("pathlib").Path(destination) / f"{preview['project_name']}-restored")
+            if QMessageBox.question(self, "Restore Backup", f"Restore {preview['file_count']} files into:\n{target}?") != QMessageBox.Yes:
+                return
+            restored = self.maintenance.restore(archive, target)
+            QMessageBox.information(self, "Restore Complete", f"Restored project: {restored.root}\nOpen it from the welcome screen.")
+        except MaintenanceError as exc:
+            QMessageBox.critical(self, "Restore Failed", f"No existing project was overwritten.\n\n{exc}")
+
+    def _validate_project(self) -> None:
+        issues = self.maintenance.validate_project()
+        if not issues:
+            QMessageBox.information(self, "Project Validation", "No integrity problems were found.")
+            return
+        details = "\n".join(f"[{item['level'].upper()}] {item['message']}" for item in issues)
+        repairable = any(item.get("repairable") for item in issues)
+        if repairable and QMessageBox.question(self, "Project Validation", details + "\n\nApply safe repairs?") == QMessageBox.Yes:
+            actions = self.maintenance.repair_safe()
+            QMessageBox.information(self, "Repair Complete", "\n".join(actions) or "No repairs were needed.")
+        else:
+            QMessageBox.warning(self, "Project Validation", details)
+
+    def _export_diagnostics(self) -> None:
+        destination, _ = QFileDialog.getSaveFileName(self, "Export Diagnostic Bundle", "va-claim-builder-diagnostics.json", "JSON (*.json)")
+        if destination:
+            path = self.maintenance.export_diagnostics(destination)
+            QMessageBox.information(self, "Diagnostics Exported", f"Sanitized diagnostics saved to:\n{path}")
+
+    def _show_privacy(self) -> None:
+        QMessageBox.information(self, "Privacy Summary", "Projects, logs, backups, and temporary files remain local. Cloud AI is used only when configured; Local-only mode prevents cloud calls. Redaction reduces identifiers but cannot guarantee anonymity. Diagnostics exclude evidence text and credentials.")
+
+    def closeEvent(self, event) -> None:
+        active = [job for job in JobManager(self.project).list(limit=200) if job.status in {"queued", "running", "cancelling"}]
+        if active and QMessageBox.question(self, "Active Work", f"{len(active)} background job(s) are active. Cancel safely and close?") != QMessageBox.Yes:
+            event.ignore()
+            return
+        for page in (self.ocr_page, self.evidence_page, self.timeline_page, self.nexus_page, self.dbq_page, self.rating_strategy_page, self.optimizer_page, self.submission_page):
+            worker = getattr(page, "worker", None)
+            if worker is not None and hasattr(worker, "cancel"):
+                worker.cancel()
+        JobManager(self.project).recover_interrupted()
+        event.accept()
