@@ -13,7 +13,7 @@ from typing import Any
 from .paths import AppPaths, resolve_app_paths
 
 PROJECT_FOLDERS = ("uploads", "ocr", "ai", "evidence", "timeline", "reports", "cache", "logs", "temp")
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 10
 
 
 EVIDENCE_SCHEMA = """
@@ -161,6 +161,18 @@ CREATE TABLE IF NOT EXISTS optimizer_actions (action_id TEXT PRIMARY KEY,assessm
 CREATE INDEX IF NOT EXISTS idx_optimizer_claim ON optimizer_assessments(claim_id,assessment_timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_optimizer_gap_filter ON optimizer_gaps(assessment_id,status,category,priority);
 CREATE INDEX IF NOT EXISTS idx_optimizer_action_rank ON optimizer_actions(assessment_id,status,priority);
+"""
+
+SUBMISSION_SCHEMA = """
+CREATE TABLE IF NOT EXISTS submission_packages (package_id TEXT PRIMARY KEY,name TEXT NOT NULL,package_type TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'draft',package_version INTEGER NOT NULL DEFAULT 1,user_notes TEXT NOT NULL DEFAULT '',generated_at TEXT,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS submission_claims (package_id TEXT NOT NULL,claim_id TEXT NOT NULL,sort_order INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(package_id,claim_id),FOREIGN KEY(package_id) REFERENCES submission_packages(package_id) ON DELETE CASCADE,FOREIGN KEY(claim_id) REFERENCES claims(claim_id) ON DELETE CASCADE);
+CREATE TABLE IF NOT EXISTS submission_sources (package_id TEXT NOT NULL,source_type TEXT NOT NULL,source_id TEXT NOT NULL,display_name TEXT NOT NULL DEFAULT '',exhibit_id TEXT NOT NULL DEFAULT '',sort_order INTEGER NOT NULL DEFAULT 0,section_key TEXT NOT NULL DEFAULT 'appendices',user_confirmed INTEGER NOT NULL DEFAULT 1,PRIMARY KEY(package_id,source_type,source_id),FOREIGN KEY(package_id) REFERENCES submission_packages(package_id) ON DELETE CASCADE);
+CREATE TABLE IF NOT EXISTS submission_sections (package_id TEXT NOT NULL,section_key TEXT NOT NULL,title TEXT NOT NULL,enabled INTEGER NOT NULL DEFAULT 1,sort_order INTEGER NOT NULL,PRIMARY KEY(package_id,section_key),FOREIGN KEY(package_id) REFERENCES submission_packages(package_id) ON DELETE CASCADE);
+CREATE TABLE IF NOT EXISTS submission_versions (version_id TEXT PRIMARY KEY,package_id TEXT NOT NULL,version_number INTEGER NOT NULL,snapshot_json TEXT NOT NULL,created_at TEXT NOT NULL,UNIQUE(package_id,version_number),FOREIGN KEY(package_id) REFERENCES submission_packages(package_id) ON DELETE CASCADE);
+CREATE TABLE IF NOT EXISTS submission_exports (export_id TEXT PRIMARY KEY,package_id TEXT NOT NULL,version_number INTEGER NOT NULL,status TEXT NOT NULL,output_path TEXT NOT NULL DEFAULT '',formats_json TEXT NOT NULL DEFAULT '[]',validation_json TEXT NOT NULL DEFAULT '[]',manifest_json TEXT NOT NULL DEFAULT '{}',generation_metadata_json TEXT NOT NULL DEFAULT '{}',job_id TEXT,error_message TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL,completed_at TEXT,FOREIGN KEY(package_id) REFERENCES submission_packages(package_id) ON DELETE CASCADE);
+CREATE INDEX IF NOT EXISTS idx_submission_type_status ON submission_packages(package_type,status);
+CREATE INDEX IF NOT EXISTS idx_submission_sources_order ON submission_sources(package_id,sort_order);
+CREATE INDEX IF NOT EXISTS idx_submission_exports ON submission_exports(package_id,version_number DESC);
 """
 
 
@@ -331,6 +343,7 @@ class ProjectManager:
             connection.executescript(DBQ_SCHEMA)
             connection.executescript(RATING_STRATEGY_SCHEMA)
             connection.executescript(OPTIMIZER_SCHEMA)
+            connection.executescript(SUBMISSION_SCHEMA)
             connection.execute(
                 "INSERT OR REPLACE INTO schema_metadata(key, value) VALUES('schema_version', ?)",
                 (str(SCHEMA_VERSION),),

@@ -154,6 +154,22 @@ class JobManager:
                     "WHERE status='pending' AND job_id IN (SELECT job_id FROM jobs WHERE status='interrupted')",
                     (_utc_now(),),
                 )
+            submission_table = connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='submission_exports'"
+            ).fetchone()
+            if submission_table:
+                connection.execute(
+                    "UPDATE submission_exports SET status='failed', "
+                    "error_message='Application closed before package generation completed', completed_at=? "
+                    "WHERE status='pending' AND job_id IN (SELECT job_id FROM jobs WHERE status='interrupted')",
+                    (_utc_now(),),
+                )
+                connection.execute(
+                    "UPDATE submission_packages SET status='failed',updated_at=? WHERE package_id IN "
+                    "(SELECT package_id FROM submission_exports WHERE status='failed' AND job_id IN "
+                    "(SELECT job_id FROM jobs WHERE status='interrupted'))",
+                    (_utc_now(),),
+                )
             connection.commit()
             return cursor.rowcount
 
