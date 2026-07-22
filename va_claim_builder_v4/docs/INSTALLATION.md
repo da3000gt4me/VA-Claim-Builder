@@ -1,3 +1,5 @@
 # Installation
 
-VA Claim Builder 4.2.0 RC1 requires Python 3.11 or 3.12 and the packages in `requirements.txt`. Create a virtual environment, install dependencies, then run `python desktop_app.py`. Release builders use PyInstaller and `requirements-packaging.txt`; build on the target operating system. Uninstall by removing the application and, only if desired, the user-data folder shown in the Privacy Summary. Back up projects first.
+Source execution requires Python 3.11 or 3.12 and `requirements.txt`.
+
+The verified macOS RC2 artifact is a thin arm64 `.app`. Extract the ZIP, optionally move the app to Applications, then open it. RC2 is ad hoc signed but not notarized. If Gatekeeper blocks first launch, verify the checksum, Control-click the app, choose **Open**, and confirm. User data and logs are under `~/Library/Application Support/VA Claim Builder`. Back up projects before uninstalling.

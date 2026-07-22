@@ -5,6 +5,7 @@ from logging.handlers import RotatingFileHandler
 import os
 import sys
 
+from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 from core.projects import ProjectManager
@@ -36,6 +37,40 @@ def main() -> int:
     manager = ProjectManager()
     configure_logging(manager)
     SettingsManager(manager.paths).apply_to_environment()
+    smoke_output = os.environ.get("VCB_PACKAGED_SMOKE_OUTPUT")
+    if smoke_output:
+        from core.release_smoke import run_packaged_workflow
+
+        try:
+            result = run_packaged_workflow(manager, smoke_output)
+            logging.info("packaged_smoke_complete checks=%s", len(result))
+            return 0 if all(value for key, value in result.items() if key != "validation_count") else 2
+        except Exception:
+            logging.exception("packaged_smoke_failed")
+            return 2
+    ui_smoke_marker = os.environ.get("VCB_PACKAGED_UI_SMOKE_MARKER")
+    if ui_smoke_marker:
+        project = manager.create_project("RC2 UI Smoke")
+        window = MainWindow(project)
+        window.show()
+
+        def complete_ui_smoke() -> None:
+            marker = {
+                "window_visible": window.isVisible(),
+                "window_title": window.windowTitle(),
+                "tab_count": window.tabs.count(),
+                "tab_names": [window.tabs.tabText(index) for index in range(window.tabs.count())],
+                "log_path": str(manager.paths.logs / "va_claim_builder.log"),
+            }
+            from pathlib import Path
+            import json
+
+            Path(ui_smoke_marker).write_text(json.dumps(marker, indent=2), encoding="utf-8")
+            window.close()
+            app.quit()
+
+        QTimer.singleShot(1500, complete_ui_smoke)
+        return app.exec()
     try:
         project = ProjectDialog.choose_or_create(None, manager)
     except Exception as exc:

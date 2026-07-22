@@ -1,3 +1,3 @@
 # Known Limitations
 
-This is Release Candidate software, not a final production release. Windows and Linux installers must be built and tested on those systems. PDF conversion of DOCX and images is not universally available; companion files are retained when merging is unreliable. AI output remains advisory. Redaction cannot guarantee de-identification. Backup restore does not synchronize changes between copies. The application does not provide medical or legal advice or guarantee a VA outcome.
+RC2 is not a final production release. macOS verification covers Apple Silicon arm64 only; it is not universal2, Developer ID signed, or notarized. Windows and Linux builds remain unverified. DOCX/image conversion to PDF is not universally available. AI remains advisory, redaction cannot guarantee de-identification, and backup restore does not synchronize copies. The application does not provide medical/legal advice or guarantee outcomes.

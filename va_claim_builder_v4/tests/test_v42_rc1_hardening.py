@@ -25,8 +25,8 @@ def project(tmp_path: Path):
 
 
 def test_authoritative_release_version() -> None:
-    assert DISPLAY_VERSION == "4.2.0 RC1"
-    assert BUILD_VERSION.startswith("4.2.0rc1")
+    assert DISPLAY_VERSION.startswith("4.2.0 RC")
+    assert BUILD_VERSION.startswith("4.2.0rc")
     assert SCHEMA_VERSION == 10
 
 

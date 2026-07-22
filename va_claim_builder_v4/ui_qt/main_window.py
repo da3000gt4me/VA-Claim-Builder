@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from PySide6.QtGui import QAction
+from PySide6.QtCore import QUrl
+from PySide6.QtGui import QAction, QDesktopServices
 from PySide6.QtWidgets import QFileDialog, QMainWindow, QMessageBox, QStatusBar, QTabWidget
 
 from core.projects import ProjectInfo
@@ -18,6 +19,7 @@ from ui_qt.submission_page import SubmissionPage
 from core.version import FULL_NAME
 from core.maintenance import MaintenanceError, ProjectMaintenance
 from core.jobs import JobManager
+from core.resources import documentation_path
 
 
 class MainWindow(QMainWindow):
@@ -125,6 +127,12 @@ class MainWindow(QMainWindow):
         privacy_action = QAction("Privacy Summary", self)
         privacy_action.triggered.connect(self._show_privacy)
         help_menu.addAction(privacy_action)
+        guide_action = QAction("User Guide", self)
+        guide_action.setShortcut("F1")
+        guide_action.triggered.connect(
+            lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(documentation_path())))
+        )
+        help_menu.addAction(guide_action)
         about_action = QAction("About", self)
         about_action.triggered.connect(
             lambda: QMessageBox.about(self, "About VA Claim Builder", f"{FULL_NAME}\nRelease Candidate software for local testing.")
