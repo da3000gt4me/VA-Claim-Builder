@@ -134,6 +134,16 @@ class JobManager:
                     "WHERE status='pending' AND job_id IN (SELECT job_id FROM jobs WHERE status='interrupted')",
                     (_utc_now(),),
                 )
+            rating_table = connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='rating_strategies'"
+            ).fetchone()
+            if rating_table:
+                connection.execute(
+                    "UPDATE rating_strategies SET status='failed', "
+                    "error_message='Application closed before rating analysis completed', updated_at=? "
+                    "WHERE status='pending' AND job_id IN (SELECT job_id FROM jobs WHERE status='interrupted')",
+                    (_utc_now(),),
+                )
             connection.commit()
             return cursor.rowcount
 
