@@ -114,6 +114,16 @@ class JobManager:
                     "WHERE status='pending' AND job_id IN (SELECT job_id FROM jobs WHERE status='interrupted')",
                     (_utc_now(),),
                 )
+            nexus_table = connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='nexus_generations'"
+            ).fetchone()
+            if nexus_table:
+                connection.execute(
+                    "UPDATE nexus_generations SET status='failed', "
+                    "error_message='Application closed before generation completed', completed_at=? "
+                    "WHERE status='pending' AND job_id IN (SELECT job_id FROM jobs WHERE status='interrupted')",
+                    (_utc_now(),),
+                )
             connection.commit()
             return cursor.rowcount
 

@@ -10,6 +10,7 @@ from ui_qt.evidence_page import EvidencePage
 from ui_qt.ocr_page import OCRPage
 from ui_qt.settings_page import SettingsPage
 from ui_qt.timeline_page import TimelinePage
+from ui_qt.nexus_page import NexusPage
 
 
 class MainWindow(QMainWindow):
@@ -25,6 +26,7 @@ class MainWindow(QMainWindow):
         self.claims_page = ClaimsPage(project)
         self.evidence_page = EvidencePage(project)
         self.timeline_page = TimelinePage(project)
+        self.nexus_page = NexusPage(project)
         self.settings_page = SettingsPage()
         self.settings_page.settings_saved.connect(
             lambda: self.statusBar().showMessage("AI settings saved", 3000)
@@ -34,6 +36,7 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.claims_page, "Claims")
         self.tabs.addTab(self.evidence_page, "Evidence")
         self.tabs.addTab(self.timeline_page, "Medical Timeline")
+        self.tabs.addTab(self.nexus_page, "Nexus Letters")
         self.tabs.addTab(self.settings_page, "Settings")
         self.setCentralWidget(self.tabs)
 
@@ -59,6 +62,10 @@ class MainWindow(QMainWindow):
         timeline_action = QAction("Open Medical Timeline", self)
         timeline_action.triggered.connect(lambda: self.tabs.setCurrentWidget(self.timeline_page))
         timeline_menu.addAction(timeline_action)
+        nexus_menu = self.menuBar().addMenu("Nexus Letters")
+        nexus_action = QAction("Open Nexus Letters", self)
+        nexus_action.triggered.connect(lambda: self.tabs.setCurrentWidget(self.nexus_page))
+        nexus_menu.addAction(nexus_action)
 
         settings_menu = self.menuBar().addMenu("Settings")
         ai_settings_action = QAction("AI & Privacy Settings", self)
@@ -77,6 +84,7 @@ class MainWindow(QMainWindow):
         self.claims_page.refresh()
         self.evidence_page.refresh()
         self.timeline_page.refresh()
+        self.nexus_page.refresh()
         self.settings_page.load()
         self.statusBar().showMessage("Workspace refreshed", 3000)
 

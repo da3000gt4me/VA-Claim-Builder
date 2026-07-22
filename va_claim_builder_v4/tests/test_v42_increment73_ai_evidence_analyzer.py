@@ -77,7 +77,7 @@ def test_analysis_migration_is_idempotent_and_has_history_metadata(tmp_path: Pat
     assert {"analysis_id", "evidence_id", "job_id", "status", "provider", "model", "analysis_version",
             "result_json", "error_message", "redaction_applied", "created_at", "completed_at"} <= columns
     assert {"idx_evidence_analyses_evidence", "idx_evidence_analyses_status", "idx_evidence_analyses_job"} <= indexes
-    assert version == ("5",)
+    assert version == ("6",)
 
 
 def test_structured_result_persistence_history_and_reopen(tmp_path: Path) -> None:

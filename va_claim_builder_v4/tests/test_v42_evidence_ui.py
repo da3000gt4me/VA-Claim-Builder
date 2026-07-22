@@ -16,6 +16,7 @@ from core.settings import AISettings, SettingsManager
 from core.projects import AppPaths, ProjectManager
 from ui_qt.evidence_page import EvidencePage
 from ui_qt.timeline_page import TimelinePage
+from ui_qt.nexus_page import NexusPage
 from ui_qt.main_window import MainWindow
 
 
@@ -27,7 +28,7 @@ def test_evidence_workspace_is_integrated_into_main_window(tmp_path: Path, monke
     window = MainWindow(project)
 
     labels = [window.tabs.tabText(index) for index in range(window.tabs.count())]
-    assert labels == ["Documents", "OCR & Text", "Claims", "Evidence", "Medical Timeline", "Settings"]
+    assert labels == ["Documents", "OCR & Text", "Claims", "Evidence", "Medical Timeline", "Nexus Letters", "Settings"]
     assert window.evidence_page.table.rowCount() == 0
     assert window.evidence_page.empty_message.text() == "No evidence has been added to this project yet."
     window.close()
@@ -71,6 +72,16 @@ def test_medical_timeline_navigation_editing_filters_and_controls(tmp_path: Path
     button_texts={button.text() for button in page.findChildren(QPushButton)}
     assert {"Extract Checked Evidence","Extract Document","Cancel Extraction","Accept Candidate","Reject Candidate","Save Accepted Events","Export CSV…"}<=button_texts
     assert page.tabs.tabText(0)=="Structured Table" and page.tabs.tabText(1)=="Narrative" and page.tabs.tabText(2)=="Candidate Review"
+    page.close();app.processEvents()
+
+
+def test_nexus_navigation_creation_sources_revisions_and_controls(tmp_path: Path) -> None:
+    app=QApplication.instance() or QApplication([]);root=tmp_path/"app";project=ProjectManager(AppPaths(root=root).ensure()).create_project("UI Nexus");ClaimManager(project).create("Back condition");e=EvidenceManager(project).create("Medical note");TimelinePage(project).manager.create("Back evaluation")
+    page=NexusPage(project);page.title.setText("Back Nexus Draft");page.sections["current_diagnosis"].setPlainText("Lumbar strain");page.evidence_sources.item(0).setCheckState(Qt.CheckState.Checked);page.save()
+    assert page.table.rowCount()==1 and page.revisions.rowCount()==1 and page.manager.get(page.current_id).evidence_ids==(e.evidence_id,)
+    buttons={b.text() for b in page.findChildren(QPushButton)}
+    assert {"Create Draft","Save Manual Edits","Duplicate Draft","Delete","Export DOCX…","Generate AI-assisted Draft","Cancel Generation"}<=buttons
+    assert [page.tabs.tabText(i) for i in range(page.tabs.count())]==["Draft Editor","Sources & AI Generation","Revision History"]
     page.close();app.processEvents()
 
 
