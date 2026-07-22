@@ -11,6 +11,7 @@ from ui_qt.ocr_page import OCRPage
 from ui_qt.settings_page import SettingsPage
 from ui_qt.timeline_page import TimelinePage
 from ui_qt.nexus_page import NexusPage
+from ui_qt.dbq_page import DBQPage
 
 
 class MainWindow(QMainWindow):
@@ -27,6 +28,7 @@ class MainWindow(QMainWindow):
         self.evidence_page = EvidencePage(project)
         self.timeline_page = TimelinePage(project)
         self.nexus_page = NexusPage(project)
+        self.dbq_page = DBQPage(project)
         self.settings_page = SettingsPage()
         self.settings_page.settings_saved.connect(
             lambda: self.statusBar().showMessage("AI settings saved", 3000)
@@ -37,6 +39,7 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.evidence_page, "Evidence")
         self.tabs.addTab(self.timeline_page, "Medical Timeline")
         self.tabs.addTab(self.nexus_page, "Nexus Letters")
+        self.tabs.addTab(self.dbq_page, "DBQ Assistant")
         self.tabs.addTab(self.settings_page, "Settings")
         self.setCentralWidget(self.tabs)
 
@@ -66,6 +69,10 @@ class MainWindow(QMainWindow):
         nexus_action = QAction("Open Nexus Letters", self)
         nexus_action.triggered.connect(lambda: self.tabs.setCurrentWidget(self.nexus_page))
         nexus_menu.addAction(nexus_action)
+        dbq_menu = self.menuBar().addMenu("DBQ Assistant")
+        dbq_action = QAction("Open DBQ Assistant", self)
+        dbq_action.triggered.connect(lambda: self.tabs.setCurrentWidget(self.dbq_page))
+        dbq_menu.addAction(dbq_action)
 
         settings_menu = self.menuBar().addMenu("Settings")
         ai_settings_action = QAction("AI & Privacy Settings", self)
@@ -85,6 +92,7 @@ class MainWindow(QMainWindow):
         self.evidence_page.refresh()
         self.timeline_page.refresh()
         self.nexus_page.refresh()
+        self.dbq_page.refresh()
         self.settings_page.load()
         self.statusBar().showMessage("Workspace refreshed", 3000)
 
