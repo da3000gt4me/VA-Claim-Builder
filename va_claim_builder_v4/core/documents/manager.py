@@ -38,6 +38,11 @@ class DocumentManager:
         self.uploads_dir.mkdir(parents=True, exist_ok=True)
         self._ensure_schema()
 
+    def _connect(self) -> sqlite3.Connection:
+        connection = sqlite3.connect(self.project.database_path)
+        connection.execute("PRAGMA foreign_keys = ON")
+        return connection
+
     def import_file(self, source: str | Path) -> tuple[DocumentInfo, bool]:
         source_path = Path(source).expanduser().resolve()
         if not source_path.is_file():
@@ -57,7 +62,7 @@ class DocumentManager:
         mime_type = mimetypes.guess_type(source_path.name)[0] or "application/octet-stream"
         imported_at = _utc_now()
         size_bytes = destination.stat().st_size
-        with sqlite3.connect(self.project.database_path) as connection:
+        with self._connect() as connection:
             connection.execute(
                 """
                 INSERT INTO documents(
@@ -88,7 +93,7 @@ class DocumentManager:
         return imported, duplicates
 
     def list_documents(self) -> list[DocumentInfo]:
-        with sqlite3.connect(self.project.database_path) as connection:
+        with self._connect() as connection:
             rows = connection.execute(
                 """
                 SELECT document_id, original_name, stored_name, sha256, size_bytes,
@@ -100,7 +105,7 @@ class DocumentManager:
         return [self._row_to_info(row) for row in rows]
 
     def get(self, document_id: str) -> DocumentInfo:
-        with sqlite3.connect(self.project.database_path) as connection:
+        with self._connect() as connection:
             row = connection.execute(
                 """
                 SELECT document_id, original_name, stored_name, sha256, size_bytes,
@@ -115,14 +120,14 @@ class DocumentManager:
 
     def remove(self, document_id: str, *, delete_file: bool = True) -> None:
         document = self.get(document_id)
-        with sqlite3.connect(self.project.database_path) as connection:
+        with self._connect() as connection:
             connection.execute("DELETE FROM documents WHERE document_id = ?", (document_id,))
             connection.commit()
         if delete_file:
             document.stored_path.unlink(missing_ok=True)
 
     def _find_by_hash(self, digest: str) -> DocumentInfo | None:
-        with sqlite3.connect(self.project.database_path) as connection:
+        with self._connect() as connection:
             row = connection.execute(
                 """
                 SELECT document_id, original_name, stored_name, sha256, size_bytes,
@@ -147,7 +152,7 @@ class DocumentManager:
         )
 
     def _ensure_schema(self) -> None:
-        with sqlite3.connect(self.project.database_path) as connection:
+        with self._connect() as connection:
             connection.executescript(
                 """
                 CREATE TABLE IF NOT EXISTS documents (
