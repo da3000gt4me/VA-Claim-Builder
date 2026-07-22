@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QThread
 from PySide6.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
@@ -16,19 +16,27 @@ from PySide6.QtWidgets import (
 )
 
 from core.documents import DocumentManager
+from core.jobs import JobManager
 from core.projects import ProjectInfo
+from ui_qt.progress_panel import ProgressPanel
+from workers import DocumentImportWorker
 
 
 class DocumentsPage(QWidget):
     def __init__(self, project: ProjectInfo, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        self.project = project
         self.manager = DocumentManager(project)
+        self.jobs = JobManager(project)
+        self.jobs.recover_interrupted()
+        self._thread: QThread | None = None
+        self._worker: DocumentImportWorker | None = None
 
         heading = QLabel("Project Documents")
         heading.setStyleSheet("font-size: 22px; font-weight: 600;")
         description = QLabel(
             "Imported files are copied into this project's persistent uploads folder. "
-            "Duplicate content is detected with SHA-256 hashing."
+            "Imports run in the background with persistent progress and cancellation support."
         )
         description.setWordWrap(True)
 
@@ -42,6 +50,9 @@ class DocumentsPage(QWidget):
         button_row.addWidget(self.remove_button)
         button_row.addStretch()
 
+        self.progress_panel = ProgressPanel()
+        self.progress_panel.cancel_button.clicked.connect(self._cancel_import)
+
         self.summary = QLabel()
         self.table = QTableWidget(0, 5)
         self.table.setHorizontalHeaderLabels(["File", "Type", "Size", "Status", "Imported"])
@@ -54,6 +65,7 @@ class DocumentsPage(QWidget):
         layout.addWidget(heading)
         layout.addWidget(description)
         layout.addLayout(button_row)
+        layout.addWidget(self.progress_panel)
         layout.addWidget(self.summary)
         layout.addWidget(self.table, 1)
         self.refresh()
@@ -71,7 +83,11 @@ class DocumentsPage(QWidget):
             self.table.setItem(row, 3, QTableWidgetItem(document.status.title()))
             self.table.setItem(row, 4, QTableWidgetItem(document.imported_at))
         self.table.resizeColumnsToContents()
-        self.summary.setText(f"{len(documents)} document{'s' if len(documents) != 1 else ''} in this project")
+        job_count = len(self.jobs.list())
+        self.summary.setText(
+            f"{len(documents)} document{'s' if len(documents) != 1 else ''} in this project"
+            f" · {job_count} recorded background job{'s' if job_count != 1 else ''}"
+        )
 
     def _add_documents(self) -> None:
         filenames, _ = QFileDialog.getOpenFileNames(
@@ -82,16 +98,60 @@ class DocumentsPage(QWidget):
         )
         if not filenames:
             return
-        try:
-            imported, duplicates = self.manager.import_files(filenames)
-        except (OSError, ValueError) as exc:
-            QMessageBox.critical(self, "Import failed", str(exc))
+        self._start_import(filenames)
+
+    def _start_import(self, filenames: list[str]) -> None:
+        if self._thread is not None:
+            QMessageBox.information(self, "Import active", "A document import is already running.")
             return
-        self.refresh()
-        message = f"Imported {len(imported)} new document(s)."
+        self.add_button.setEnabled(False)
+        self.remove_button.setEnabled(False)
+        self.progress_panel.start(f"Preparing to import {len(filenames)} document(s)…")
+
+        thread = QThread(self)
+        worker = DocumentImportWorker(self.project, filenames)
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+        worker.progress.connect(self.progress_panel.update_progress)
+        worker.completed.connect(self._import_completed)
+        worker.failed.connect(self._import_failed)
+        worker.cancelled.connect(self._import_cancelled)
+        worker.finished.connect(thread.quit)
+        worker.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
+        thread.finished.connect(self._import_finished)
+        self._thread = thread
+        self._worker = worker
+        thread.start()
+
+    def _cancel_import(self) -> None:
+        if self._worker is not None:
+            self.progress_panel.cancel_button.setEnabled(False)
+            self.progress_panel.label.setText("Cancelling after the current file…")
+            self._worker.cancel()
+
+    def _import_completed(self, imported: int, duplicates: int) -> None:
+        message = f"Imported {imported} new document(s)."
         if duplicates:
-            message += f" Skipped {len(duplicates)} duplicate(s)."
+            message += f" Skipped {duplicates} duplicate(s)."
+        self.progress_panel.finish(message)
+        self.refresh()
         QMessageBox.information(self, "Import complete", message)
+
+    def _import_failed(self, message: str) -> None:
+        self.progress_panel.finish("Import failed")
+        QMessageBox.critical(self, "Import failed", message)
+
+    def _import_cancelled(self) -> None:
+        self.progress_panel.finish("Import cancelled")
+        self.refresh()
+
+    def _import_finished(self) -> None:
+        self._thread = None
+        self._worker = None
+        self.add_button.setEnabled(True)
+        self.remove_button.setEnabled(True)
+        self.refresh()
 
     def _remove_selected(self) -> None:
         document_ids = {
