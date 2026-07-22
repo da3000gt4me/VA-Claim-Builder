@@ -6,6 +6,7 @@ from PySide6.QtWidgets import QMainWindow, QMessageBox, QStatusBar, QTabWidget
 from core.projects import ProjectInfo
 from ui_qt.documents_page import DocumentsPage
 from ui_qt.ocr_page import OCRPage
+from ui_qt.settings_page import SettingsPage
 
 
 class MainWindow(QMainWindow):
@@ -18,8 +19,13 @@ class MainWindow(QMainWindow):
         self.tabs = QTabWidget()
         self.documents_page = DocumentsPage(project)
         self.ocr_page = OCRPage(project)
+        self.settings_page = SettingsPage()
+        self.settings_page.settings_saved.connect(
+            lambda: self.statusBar().showMessage("AI settings saved", 3000)
+        )
         self.tabs.addTab(self.documents_page, "Documents")
         self.tabs.addTab(self.ocr_page, "OCR & Text")
+        self.tabs.addTab(self.settings_page, "Settings")
         self.setCentralWidget(self.tabs)
 
         project_menu = self.menuBar().addMenu("Project")
@@ -31,6 +37,13 @@ class MainWindow(QMainWindow):
         project_info_action.triggered.connect(self._show_project_information)
         project_menu.addAction(project_info_action)
 
+        settings_menu = self.menuBar().addMenu("Settings")
+        ai_settings_action = QAction("AI & Privacy Settings", self)
+        ai_settings_action.triggered.connect(
+            lambda: self.tabs.setCurrentWidget(self.settings_page)
+        )
+        settings_menu.addAction(ai_settings_action)
+
         status = QStatusBar()
         status.showMessage(f"Project loaded: {project.name}")
         self.setStatusBar(status)
@@ -38,6 +51,7 @@ class MainWindow(QMainWindow):
     def _refresh_workspace(self) -> None:
         self.documents_page.refresh()
         self.ocr_page.refresh()
+        self.settings_page.load()
         self.statusBar().showMessage("Workspace refreshed", 3000)
 
     def _show_project_information(self) -> None:
