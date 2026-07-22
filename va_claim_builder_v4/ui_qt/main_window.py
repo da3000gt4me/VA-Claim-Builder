@@ -6,6 +6,7 @@ from PySide6.QtWidgets import QMainWindow, QMessageBox, QStatusBar, QTabWidget
 from core.projects import ProjectInfo
 from ui_qt.claims_page import ClaimsPage
 from ui_qt.documents_page import DocumentsPage
+from ui_qt.evidence_page import EvidencePage
 from ui_qt.ocr_page import OCRPage
 from ui_qt.settings_page import SettingsPage
 
@@ -21,6 +22,7 @@ class MainWindow(QMainWindow):
         self.documents_page = DocumentsPage(project)
         self.ocr_page = OCRPage(project)
         self.claims_page = ClaimsPage(project)
+        self.evidence_page = EvidencePage(project)
         self.settings_page = SettingsPage()
         self.settings_page.settings_saved.connect(
             lambda: self.statusBar().showMessage("AI settings saved", 3000)
@@ -28,6 +30,7 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.documents_page, "Documents")
         self.tabs.addTab(self.ocr_page, "OCR & Text")
         self.tabs.addTab(self.claims_page, "Claims")
+        self.tabs.addTab(self.evidence_page, "Evidence")
         self.tabs.addTab(self.settings_page, "Settings")
         self.setCentralWidget(self.tabs)
 
@@ -45,6 +48,11 @@ class MainWindow(QMainWindow):
         claims_action.triggered.connect(lambda: self.tabs.setCurrentWidget(self.claims_page))
         claims_menu.addAction(claims_action)
 
+        evidence_menu = self.menuBar().addMenu("Evidence")
+        evidence_action = QAction("Open Evidence Workspace", self)
+        evidence_action.triggered.connect(lambda: self.tabs.setCurrentWidget(self.evidence_page))
+        evidence_menu.addAction(evidence_action)
+
         settings_menu = self.menuBar().addMenu("Settings")
         ai_settings_action = QAction("AI & Privacy Settings", self)
         ai_settings_action.triggered.connect(
@@ -60,6 +68,7 @@ class MainWindow(QMainWindow):
         self.documents_page.refresh()
         self.ocr_page.refresh()
         self.claims_page.refresh()
+        self.evidence_page.refresh()
         self.settings_page.load()
         self.statusBar().showMessage("Workspace refreshed", 3000)
 
