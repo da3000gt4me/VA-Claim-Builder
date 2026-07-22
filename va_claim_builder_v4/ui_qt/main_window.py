@@ -5,6 +5,7 @@ from PySide6.QtWidgets import QMainWindow, QMessageBox, QStatusBar, QTabWidget
 
 from core.projects import ProjectInfo
 from ui_qt.documents_page import DocumentsPage
+from ui_qt.ocr_page import OCRPage
 
 
 class MainWindow(QMainWindow):
@@ -16,12 +17,14 @@ class MainWindow(QMainWindow):
 
         self.tabs = QTabWidget()
         self.documents_page = DocumentsPage(project)
+        self.ocr_page = OCRPage(project)
         self.tabs.addTab(self.documents_page, "Documents")
+        self.tabs.addTab(self.ocr_page, "OCR & Text")
         self.setCentralWidget(self.tabs)
 
         project_menu = self.menuBar().addMenu("Project")
-        refresh_action = QAction("Refresh Documents", self)
-        refresh_action.triggered.connect(self.documents_page.refresh)
+        refresh_action = QAction("Refresh Workspace", self)
+        refresh_action.triggered.connect(self._refresh_workspace)
         project_menu.addAction(refresh_action)
 
         project_info_action = QAction("Project Information", self)
@@ -31,6 +34,11 @@ class MainWindow(QMainWindow):
         status = QStatusBar()
         status.showMessage(f"Project loaded: {project.name}")
         self.setStatusBar(status)
+
+    def _refresh_workspace(self) -> None:
+        self.documents_page.refresh()
+        self.ocr_page.refresh()
+        self.statusBar().showMessage("Workspace refreshed", 3000)
 
     def _show_project_information(self) -> None:
         QMessageBox.information(
