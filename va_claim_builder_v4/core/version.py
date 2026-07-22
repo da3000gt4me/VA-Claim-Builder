@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import json
 import os
-from pathlib import Path
+
+from core.resources import resource_path
 
 _DATA = json.loads(
-    (Path(__file__).resolve().parent.parent / "version.json").read_text(encoding="utf-8")
+    resource_path("version.json").read_text(encoding="utf-8")
 )
 VERSION = str(_DATA["version"])
 DISPLAY_VERSION = str(_DATA["display_version"])

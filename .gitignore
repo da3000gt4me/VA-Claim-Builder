@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv*/
+.test-env*/
+va_claim_builder_v4/.build-env-*/
+va_claim_builder_v4/build/
+va_claim_builder_v4/dist/
+*.incomplete
+.DS_Store

@@ -1,3 +1,3 @@
 # Testing Guide
 
-Run `python -m pytest -q tests/test_v42_rc1_hardening.py` for RC1 checks, `python -m pytest -q tests/test_v42_*.py` for Version 4.2, and `QT_QPA_PLATFORM=offscreen python -m pytest -q` for the full suite. Tests use temporary projects, generated content, mocked providers, and no network. Platform packaging commands are verified on their native operating system.
+Run `python -m pytest -q tests/test_v42_rc2_packaging.py`, `python -m pytest -q tests/test_v42_rc1_hardening.py`, and `QT_QPA_PLATFORM=offscreen python -m pytest -q`. After building, run `python scripts/smoke_macos_bundle.py "dist/release/.../VA Claim Builder.app" --timeout 90`. Tests use temporary synthetic projects and mocked providers; normal tests need no network.

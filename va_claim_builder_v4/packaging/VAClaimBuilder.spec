@@ -1,14 +1,13 @@
 from pathlib import Path
+import os
 import sys
 
-root = Path(SPECPATH).parent
+root = Path(os.environ.get("VCB_SOURCE_ROOT", Path.cwd())).resolve()
 import json
 version_data = json.loads((root / "version.json").read_text(encoding="utf-8"))
-datas = [
-    (str(root / "version.json"), "."),
-    (str(root / "docs"), "docs"),
-    (str(root / "prompts"), "prompts"),
-]
+documentation = ["USER_GUIDE.md", "QUICK_START.md", "INSTALLATION.md", "BACKUP_RESTORE.md", "PRIVACY_DATA_HANDLING.md", "TROUBLESHOOTING.md", "KNOWN_LIMITATIONS.md", "RELEASE_NOTES_4.2.0_RC1.md", "RELEASE_NOTES_4.2.0_RC2.md"]
+datas = [(str(root / "version.json"), "."), (str(root / "prompts"), "prompts")]
+datas += [(str(root / "docs" / name), "docs") for name in documentation]
 binaries = []
 hiddenimports = ["PySide6.QtCore", "PySide6.QtGui", "PySide6.QtWidgets"]
 
@@ -18,7 +17,11 @@ analysis = Analysis(
     binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
-    excludes=["pytest", "tests", "streamlit"],
+    excludes=[
+        "pytest", "tests", "streamlit", "pandas", "pyarrow", "numpy",
+        "matplotlib", "IPython", "notebook", "jupyter", "tkinter",
+        "sqlalchemy.testing", "setuptools", "pip",
+    ],
     noarchive=False,
 )
 pyz = PYZ(analysis.pure)

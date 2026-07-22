@@ -6,3 +6,5 @@
 - For PDF failures, verify the file is readable and not password protected.
 - For permission or disk-space failures, select a writable local destination with adequate free space.
 - Export a sanitized diagnostic bundle from the Project menu when reporting a defect.
+- A Gatekeeper warning is expected for the unnotarized macOS RC; verify the checksum, then use Control-click > Open.
+- Failed packaging retains logs under `dist/release/build-logs` without replacing the last valid release.
