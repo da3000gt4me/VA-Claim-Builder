@@ -4,6 +4,7 @@ from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QMainWindow, QMessageBox, QStatusBar, QTabWidget
 
 from core.projects import ProjectInfo
+from ui_qt.claims_page import ClaimsPage
 from ui_qt.documents_page import DocumentsPage
 from ui_qt.ocr_page import OCRPage
 from ui_qt.settings_page import SettingsPage
@@ -19,12 +20,14 @@ class MainWindow(QMainWindow):
         self.tabs = QTabWidget()
         self.documents_page = DocumentsPage(project)
         self.ocr_page = OCRPage(project)
+        self.claims_page = ClaimsPage(project)
         self.settings_page = SettingsPage()
         self.settings_page.settings_saved.connect(
             lambda: self.statusBar().showMessage("AI settings saved", 3000)
         )
         self.tabs.addTab(self.documents_page, "Documents")
         self.tabs.addTab(self.ocr_page, "OCR & Text")
+        self.tabs.addTab(self.claims_page, "Claims")
         self.tabs.addTab(self.settings_page, "Settings")
         self.setCentralWidget(self.tabs)
 
@@ -36,6 +39,11 @@ class MainWindow(QMainWindow):
         project_info_action = QAction("Project Information", self)
         project_info_action.triggered.connect(self._show_project_information)
         project_menu.addAction(project_info_action)
+
+        claims_menu = self.menuBar().addMenu("Claims")
+        claims_action = QAction("Open Claims Workspace", self)
+        claims_action.triggered.connect(lambda: self.tabs.setCurrentWidget(self.claims_page))
+        claims_menu.addAction(claims_action)
 
         settings_menu = self.menuBar().addMenu("Settings")
         ai_settings_action = QAction("AI & Privacy Settings", self)
@@ -51,6 +59,7 @@ class MainWindow(QMainWindow):
     def _refresh_workspace(self) -> None:
         self.documents_page.refresh()
         self.ocr_page.refresh()
+        self.claims_page.refresh()
         self.settings_page.load()
         self.statusBar().showMessage("Workspace refreshed", 3000)
 
