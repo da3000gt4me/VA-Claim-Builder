@@ -13,7 +13,7 @@ from typing import Any
 from .paths import AppPaths, resolve_app_paths
 
 PROJECT_FOLDERS = ("uploads", "ocr", "ai", "evidence", "timeline", "reports", "cache", "logs", "temp")
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 
 EVIDENCE_SCHEMA = """
@@ -109,6 +109,29 @@ CREATE INDEX IF NOT EXISTS idx_medical_timeline_date ON medical_timeline_events(
 CREATE INDEX IF NOT EXISTS idx_medical_timeline_type ON medical_timeline_events(event_type);
 CREATE INDEX IF NOT EXISTS idx_timeline_event_claim ON timeline_event_claims(claim_id,event_id);
 CREATE INDEX IF NOT EXISTS idx_timeline_candidate_status ON timeline_candidates(status,created_at);
+"""
+
+NEXUS_SCHEMA = """
+CREATE TABLE IF NOT EXISTS nexus_letters (
+ letter_id TEXT PRIMARY KEY, claim_id TEXT NOT NULL, title TEXT NOT NULL, letter_type TEXT NOT NULL DEFAULT 'physician_review',
+ status TEXT NOT NULL DEFAULT 'draft', primary_theory TEXT NOT NULL DEFAULT 'direct', theories_json TEXT NOT NULL DEFAULT '[]',
+ author_name TEXT NOT NULL DEFAULT '', author_credentials TEXT NOT NULL DEFAULT '', specialty TEXT NOT NULL DEFAULT '',
+ current_version INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+ FOREIGN KEY(claim_id) REFERENCES claims(claim_id) ON DELETE RESTRICT
+);
+CREATE TABLE IF NOT EXISTS nexus_letter_versions (
+ version_id TEXT PRIMARY KEY, letter_id TEXT NOT NULL, version_number INTEGER NOT NULL, content_json TEXT NOT NULL,
+ ai_metadata_json TEXT NOT NULL DEFAULT '{}', created_at TEXT NOT NULL, UNIQUE(letter_id,version_number),
+ FOREIGN KEY(letter_id) REFERENCES nexus_letters(letter_id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS nexus_letter_evidence (letter_id TEXT NOT NULL,evidence_id TEXT NOT NULL,linked_at TEXT NOT NULL,PRIMARY KEY(letter_id,evidence_id),FOREIGN KEY(letter_id) REFERENCES nexus_letters(letter_id) ON DELETE CASCADE,FOREIGN KEY(evidence_id) REFERENCES evidence(evidence_id) ON DELETE CASCADE);
+CREATE TABLE IF NOT EXISTS nexus_letter_timeline (letter_id TEXT NOT NULL,event_id TEXT NOT NULL,linked_at TEXT NOT NULL,PRIMARY KEY(letter_id,event_id),FOREIGN KEY(letter_id) REFERENCES nexus_letters(letter_id) ON DELETE CASCADE,FOREIGN KEY(event_id) REFERENCES medical_timeline_events(event_id) ON DELETE CASCADE);
+CREATE TABLE IF NOT EXISTS nexus_letter_documents (letter_id TEXT NOT NULL,document_id TEXT NOT NULL,linked_at TEXT NOT NULL,PRIMARY KEY(letter_id,document_id),FOREIGN KEY(letter_id) REFERENCES nexus_letters(letter_id) ON DELETE CASCADE,FOREIGN KEY(document_id) REFERENCES documents(document_id) ON DELETE CASCADE);
+CREATE TABLE IF NOT EXISTS nexus_literature (reference_id TEXT PRIMARY KEY,letter_id TEXT NOT NULL,title TEXT NOT NULL,author TEXT NOT NULL DEFAULT '',publication TEXT NOT NULL DEFAULT '',year TEXT NOT NULL DEFAULT '',doi_url TEXT NOT NULL DEFAULT '',relevance_note TEXT NOT NULL DEFAULT '',verified INTEGER NOT NULL DEFAULT 1,created_at TEXT NOT NULL,FOREIGN KEY(letter_id) REFERENCES nexus_letters(letter_id) ON DELETE CASCADE);
+CREATE TABLE IF NOT EXISTS nexus_generations (generation_id TEXT PRIMARY KEY,letter_id TEXT NOT NULL,job_id TEXT,status TEXT NOT NULL DEFAULT 'pending',provider TEXT NOT NULL DEFAULT '',model TEXT NOT NULL DEFAULT '',redaction_applied INTEGER NOT NULL DEFAULT 0,error_message TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL,completed_at TEXT,FOREIGN KEY(letter_id) REFERENCES nexus_letters(letter_id) ON DELETE CASCADE);
+CREATE INDEX IF NOT EXISTS idx_nexus_claim ON nexus_letters(claim_id,status);
+CREATE INDEX IF NOT EXISTS idx_nexus_versions ON nexus_letter_versions(letter_id,version_number DESC);
+CREATE INDEX IF NOT EXISTS idx_nexus_generation_job ON nexus_generations(job_id,status);
 """
 
 
@@ -275,6 +298,7 @@ class ProjectManager:
             connection.execute("CREATE INDEX IF NOT EXISTS idx_evidence_duplicate ON evidence(duplicate_of_evidence_id)")
             connection.executescript(EVIDENCE_ANALYSIS_SCHEMA)
             connection.executescript(TIMELINE_SCHEMA)
+            connection.executescript(NEXUS_SCHEMA)
             connection.execute(
                 "INSERT OR REPLACE INTO schema_metadata(key, value) VALUES('schema_version', ?)",
                 (str(SCHEMA_VERSION),),

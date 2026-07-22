@@ -47,7 +47,7 @@ def test_evidence_migration_is_present_and_idempotent(tmp_path: Path) -> None:
     assert {"idx_evidence_type", "idx_evidence_document", "idx_claim_evidence_claim"}.issubset(indexes)
     assert any(row[2] == "documents" and row[6] == "SET NULL" for row in evidence_fks)
     assert {row[2] for row in link_fks} == {"claims", "evidence"}
-    assert version == ("5",)
+    assert version == ("6",)
 
 
 def test_evidence_crud_filter_and_search(tmp_path: Path) -> None:
@@ -159,4 +159,4 @@ def test_pre_migration_project_is_upgraded_without_data_loss(tmp_path: Path) -> 
     with sqlite3.connect(project.database_path) as connection:
         metadata = connection.execute("SELECT name, created_at FROM project_metadata").fetchone()
     assert metadata == ("Legacy V4.2", "old-created")
-    assert json.loads((root / "manifest.json").read_text(encoding="utf-8"))["schema_version"] == 5
+    assert json.loads((root / "manifest.json").read_text(encoding="utf-8"))["schema_version"] == 6
