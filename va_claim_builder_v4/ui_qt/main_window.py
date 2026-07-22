@@ -14,6 +14,7 @@ from ui_qt.nexus_page import NexusPage
 from ui_qt.dbq_page import DBQPage
 from ui_qt.rating_strategy_page import RatingStrategyPage
 from ui_qt.optimizer_page import OptimizerPage
+from ui_qt.submission_page import SubmissionPage
 
 
 class MainWindow(QMainWindow):
@@ -33,6 +34,7 @@ class MainWindow(QMainWindow):
         self.dbq_page = DBQPage(project)
         self.rating_strategy_page = RatingStrategyPage(project)
         self.optimizer_page = OptimizerPage(project)
+        self.submission_page = SubmissionPage(project)
         self.settings_page = SettingsPage()
         self.settings_page.settings_saved.connect(
             lambda: self.statusBar().showMessage("AI settings saved", 3000)
@@ -46,6 +48,7 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.dbq_page, "DBQ Assistant")
         self.tabs.addTab(self.rating_strategy_page, "Rating Strategy")
         self.tabs.addTab(self.optimizer_page, "Claim Optimizer")
+        self.tabs.addTab(self.submission_page, "Submission Builder")
         self.tabs.addTab(self.settings_page, "Settings")
         self.setCentralWidget(self.tabs)
 
@@ -87,6 +90,10 @@ class MainWindow(QMainWindow):
         optimizer_action = QAction("Open Claim Optimizer", self)
         optimizer_action.triggered.connect(lambda: self.tabs.setCurrentWidget(self.optimizer_page))
         optimizer_menu.addAction(optimizer_action)
+        submission_menu = self.menuBar().addMenu("Submission Builder")
+        submission_action = QAction("Open Submission Builder", self)
+        submission_action.triggered.connect(lambda: self.tabs.setCurrentWidget(self.submission_page))
+        submission_menu.addAction(submission_action)
 
         settings_menu = self.menuBar().addMenu("Settings")
         ai_settings_action = QAction("AI & Privacy Settings", self)
@@ -109,6 +116,7 @@ class MainWindow(QMainWindow):
         self.dbq_page.refresh()
         self.rating_strategy_page.refresh()
         self.optimizer_page.refresh()
+        self.submission_page.refresh()
         self.settings_page.load()
         self.statusBar().showMessage("Workspace refreshed", 3000)
 

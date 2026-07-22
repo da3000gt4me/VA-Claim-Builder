@@ -20,6 +20,7 @@ from ui_qt.nexus_page import NexusPage
 from ui_qt.dbq_page import DBQPage
 from ui_qt.rating_strategy_page import RatingStrategyPage
 from ui_qt.optimizer_page import OptimizerPage
+from ui_qt.submission_page import SubmissionPage
 from ui_qt.main_window import MainWindow
 
 
@@ -31,7 +32,7 @@ def test_evidence_workspace_is_integrated_into_main_window(tmp_path: Path, monke
     window = MainWindow(project)
 
     labels = [window.tabs.tabText(index) for index in range(window.tabs.count())]
-    assert labels == ["Documents", "OCR & Text", "Claims", "Evidence", "Medical Timeline", "Nexus Letters", "DBQ Assistant", "Rating Strategy", "Claim Optimizer", "Settings"]
+    assert labels == ["Documents", "OCR & Text", "Claims", "Evidence", "Medical Timeline", "Nexus Letters", "DBQ Assistant", "Rating Strategy", "Claim Optimizer", "Submission Builder", "Settings"]
     assert window.evidence_page.table.rowCount() == 0
     assert window.evidence_page.empty_message.text() == "No evidence has been added to this project yet."
     window.close()
@@ -105,6 +106,13 @@ def test_optimizer_navigation_gap_management_filters_history_and_exports(tmp_pat
     app=QApplication.instance() or QApplication([]);root=tmp_path/"app";project=ProjectManager(AppPaths(root=root).ensure()).create_project("UI Optimizer");claim=ClaimManager(project).create("Back strain");page=OptimizerPage(project);a=page.manager.create(claim.claim_id,status="completed",overall_score=40,service_connection_score=50,severity_rating_score=30,evidence_quality_score=60,evidence_consistency_score=80,confidence="low",score_explanation={"formula":"weighted"});g=page.manager.add_gap(a.assessment_id,"missing_current_diagnosis","Diagnosis missing",priority=1);page.claims_list.setCurrentRow(0);page.refresh();page.history.selectRow(0);app.processEvents()
     assert page.gaps.rowCount()==1 and "Overall: 40%" in page.scores.text();page.gaps.selectRow(0);page._decision("resolve");assert page.manager.get_gap(g.gap_id).status=="resolved";page._decision("reopen");assert page.manager.get_gap(g.gap_id).status=="unresolved";page.unresolved.setChecked(True);app.processEvents();assert page.gaps.rowCount()==1
     buttons={b.text() for b in page.findChildren(QPushButton)};assert {"Analyze Selected Claim","Analyze All Claims","Cancel Analysis","Add Manual Gap","Edit Gap","Resolve Gap","Reopen Gap","Mark Not Applicable","Accept AI Suggestion","Reject AI Suggestion","Mark Action Completed","Export Lay Statement DOCX…","Export Provider Request DOCX…"}<=buttons;page.close();app.processEvents()
+
+
+def test_submission_navigation_creation_source_section_exhibit_validation_and_history(tmp_path: Path) -> None:
+    app=QApplication.instance() or QApplication([]);root=tmp_path/"app";project=ProjectManager(AppPaths(root=root).ensure()).create_project("UI Submission");claim=ClaimManager(project).create("Migraines");ev=EvidenceManager(project).create("Headache diary");page=SubmissionPage(project);page.name.setText("Migraine package");page.package_type.setCurrentIndex(page.package_type.findData("single_claim"));page.claim_select.item(0).setCheckState(Qt.CheckState.Checked);page.source_lists["evidence"].item(0).setCheckState(Qt.CheckState.Checked);page.save();page._validate()
+    assert page.packages.rowCount()==1 and page.sections.rowCount()>=20 and page.exhibits.rowCount()==1 and page.manager.get(page.current).claim_ids==(claim.claim_id,);assert page.manager.get(page.current).sources[0].source_id==ev.evidence_id and "WARNING" not in page.validation.toPlainText().splitlines()[0]
+    page.sections.selectRow(1);before=page.manager.get(page.current).sections[1]["section_key"];page._move_section(-1);assert page.manager.get(page.current).sections[0]["section_key"]==before
+    buttons={b.text() for b in page.findChildren(QPushButton)};assert {"Create Package","Save Package Configuration","Duplicate Package","Delete Package","Move Section Up","Move Exhibit Up","Rename Exhibit","Validate Package","Generate Package","Cancel Generation","Open Output Folder"}<=buttons;page.close();app.processEvents()
 
 
 def test_ai_analysis_controls_display_history_and_advisory_result(tmp_path: Path, monkeypatch) -> None:

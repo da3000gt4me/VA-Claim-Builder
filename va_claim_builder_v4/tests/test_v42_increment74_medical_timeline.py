@@ -24,7 +24,7 @@ def service(p,ap,router,settings=None):
 def test_timeline_migration_is_idempotent(tmp_path):
  p,ap=project(tmp_path);ProjectManager(ap).open_project(p.root);ProjectManager(ap).open_project(p.root)
  with sqlite3.connect(p.database_path) as c:tables={x[0] for x in c.execute("SELECT name FROM sqlite_master WHERE type='table'")};version=c.execute("SELECT value FROM schema_metadata WHERE key='schema_version'").fetchone()
- assert {"medical_timeline_events","timeline_event_claims","timeline_extractions","timeline_candidates"}<=tables;assert version==("9",)
+ assert {"medical_timeline_events","timeline_event_claims","timeline_extractions","timeline_candidates"}<=tables;assert version==("10",)
 def test_crud_relationships_filters_sort_reopen_and_csv(tmp_path):
  p,ap=project(tmp_path);claim=ClaimManager(p).create("Back");src=tmp_path/"r.txt";src.write_text("record");doc,_=DocumentManager(p).import_file(src);ev=EvidenceManager(p).create("Evidence",document_id=doc.document_id);m=TimelineManager(p)
  a=m.create("Later",claim_ids=[claim.claim_id],document_id=doc.document_id,evidence_id=ev.evidence_id,**{k:v for k,v in event().items() if k!="title"});b=m.create("Earlier",event_date="2020",date_precision="year",event_type="treatment",provider_facility="VA",body_system_condition="Spine")

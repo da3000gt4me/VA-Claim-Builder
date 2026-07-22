@@ -24,7 +24,7 @@ def test_migration_crud_relationships_revisions_duplicate_reopen(tmp_path):
  m.link_evidence(x.letter_id,ev.evidence_id);assert len(m.get(x.letter_id).evidence_ids)==1;x=m.update(x.letter_id,medical_rationale="Reasoned chronology");assert x.current_version==2 and len(m.versions(x.letter_id))==2
  copy=m.duplicate(x.letter_id);assert copy.current_version==1 and copy.evidence_ids==x.evidence_ids;assert m.list(claim_id=claim.claim_id,theory="direct",search="Lumbar");m.unlink_evidence(copy.letter_id,ev.evidence_id);m.delete(copy.letter_id)
  reopened=ProjectManager(paths).open_project(p.root);assert NexusLetterManager(reopened).get(x.letter_id).content["medical_rationale"]=="Reasoned chronology"
- with sqlite3.connect(p.database_path) as c:assert c.execute("SELECT value FROM schema_metadata WHERE key='schema_version'").fetchone()==("9",);assert c.execute("SELECT count(*) FROM nexus_letter_versions").fetchone()[0]==2
+ with sqlite3.connect(p.database_path) as c:assert c.execute("SELECT value FROM schema_metadata WHERE key='schema_version'").fetchone()==("10",);assert c.execute("SELECT count(*) FROM nexus_letter_versions").fetchone()[0]==2
 def test_supported_theories_literature_and_docx_export(tmp_path):
  p,_,claim=setup(tmp_path);m=NexusLetterManager(p)
  for theory in NEXUS_THEORIES:
