@@ -13,7 +13,7 @@ from typing import Any
 from .paths import AppPaths, resolve_app_paths
 
 PROJECT_FOLDERS = ("uploads", "ocr", "ai", "evidence", "timeline", "reports", "cache", "logs", "temp")
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 
 
 EVIDENCE_SCHEMA = """
@@ -152,6 +152,15 @@ CREATE TABLE IF NOT EXISTS rating_strategies (strategy_id TEXT PRIMARY KEY,claim
 CREATE INDEX IF NOT EXISTS idx_rating_strategy_claim ON rating_strategies(claim_id,analysis_timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_rating_strategy_status ON rating_strategies(status);
 CREATE INDEX IF NOT EXISTS idx_rating_strategy_job ON rating_strategies(job_id,status);
+"""
+
+OPTIMIZER_SCHEMA = """
+CREATE TABLE IF NOT EXISTS optimizer_assessments (assessment_id TEXT PRIMARY KEY,claim_id TEXT NOT NULL,job_id TEXT,status TEXT NOT NULL DEFAULT 'pending',assessment_timestamp TEXT NOT NULL,assessment_version TEXT NOT NULL,overall_score INTEGER NOT NULL DEFAULT 0,service_connection_score INTEGER NOT NULL DEFAULT 0,severity_rating_score INTEGER NOT NULL DEFAULT 0,evidence_quality_score INTEGER NOT NULL DEFAULT 0,evidence_consistency_score INTEGER NOT NULL DEFAULT 0,confidence TEXT NOT NULL DEFAULT 'low',score_explanation_json TEXT NOT NULL DEFAULT '{}',ai_metadata_json TEXT NOT NULL DEFAULT '{}',error_message TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL,updated_at TEXT NOT NULL,FOREIGN KEY(claim_id) REFERENCES claims(claim_id) ON DELETE CASCADE);
+CREATE TABLE IF NOT EXISTS optimizer_gaps (gap_id TEXT PRIMARY KEY,assessment_id TEXT NOT NULL,category TEXT NOT NULL,description TEXT NOT NULL,severity TEXT NOT NULL,priority INTEGER NOT NULL,confidence TEXT NOT NULL,evidence_basis_json TEXT NOT NULL DEFAULT '[]',recommended_resolution TEXT NOT NULL DEFAULT '',responsible_party TEXT NOT NULL DEFAULT '',status TEXT NOT NULL DEFAULT 'unresolved',follow_up_date TEXT NOT NULL DEFAULT '',notes TEXT NOT NULL DEFAULT '',origin TEXT NOT NULL DEFAULT 'rule',user_confirmation TEXT NOT NULL DEFAULT 'pending',created_at TEXT NOT NULL,updated_at TEXT NOT NULL,FOREIGN KEY(assessment_id) REFERENCES optimizer_assessments(assessment_id) ON DELETE CASCADE);
+CREATE TABLE IF NOT EXISTS optimizer_actions (action_id TEXT PRIMARY KEY,assessment_id TEXT NOT NULL,gap_id TEXT,description TEXT NOT NULL,priority INTEGER NOT NULL,expected_value TEXT NOT NULL,effort_level TEXT NOT NULL,dependency TEXT NOT NULL DEFAULT '',status TEXT NOT NULL DEFAULT 'pending',completion_notes TEXT NOT NULL DEFAULT '',origin TEXT NOT NULL DEFAULT 'rule',created_at TEXT NOT NULL,updated_at TEXT NOT NULL,FOREIGN KEY(assessment_id) REFERENCES optimizer_assessments(assessment_id) ON DELETE CASCADE,FOREIGN KEY(gap_id) REFERENCES optimizer_gaps(gap_id) ON DELETE SET NULL);
+CREATE INDEX IF NOT EXISTS idx_optimizer_claim ON optimizer_assessments(claim_id,assessment_timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_optimizer_gap_filter ON optimizer_gaps(assessment_id,status,category,priority);
+CREATE INDEX IF NOT EXISTS idx_optimizer_action_rank ON optimizer_actions(assessment_id,status,priority);
 """
 
 
@@ -321,6 +330,7 @@ class ProjectManager:
             connection.executescript(NEXUS_SCHEMA)
             connection.executescript(DBQ_SCHEMA)
             connection.executescript(RATING_STRATEGY_SCHEMA)
+            connection.executescript(OPTIMIZER_SCHEMA)
             connection.execute(
                 "INSERT OR REPLACE INTO schema_metadata(key, value) VALUES('schema_version', ?)",
                 (str(SCHEMA_VERSION),),
