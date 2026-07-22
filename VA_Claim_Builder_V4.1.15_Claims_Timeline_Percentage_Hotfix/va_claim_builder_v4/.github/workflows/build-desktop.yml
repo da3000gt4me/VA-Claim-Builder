@@ -1,0 +1,34 @@
+name: Build Desktop Applications
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: choco install innosetup -y
+      - shell: powershell
+        run: ./packaging/windows/build_windows.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VA-Claim-Builder-Windows
+          path: |
+            dist/VAClaimBuilder/**
+            packaging/windows/dist-installer/*.exe
+  macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: ./packaging/macos/build_macos.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VA-Claim-Builder-macOS
+          path: |
+            dist/VA Claim Builder.app/**
+            dist/*.dmg

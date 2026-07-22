@@ -1,0 +1,16 @@
+VA Claim Builder 4.1.1 — Windows Build Hotfix
+
+This package corrects the PyInstaller project-root path that caused:
+ERROR: script '...\desktop_launcher.py' not found
+
+Build steps:
+1. Extract the complete ZIP. Do not move only the packaging folder.
+2. Open PowerShell inside the va_claim_builder_v4 folder.
+3. Run:
+   powershell -ExecutionPolicy Bypass -File packaging\windows\build_windows.ps1
+
+Outputs:
+- Portable EXE: dist\VAClaimBuilder\VAClaimBuilder.exe
+- Setup EXE (requires Inno Setup 6): packaging\windows\dist-installer\VA_Claim_Builder_4.1.0_Windows_Setup.exe
+
+Inno Setup is optional for the portable application. It is required only for the install wizard and shortcuts.

@@ -1,0 +1,6 @@
+{
+  "claim_assessment": {"preferred_provider": "openai", "fallback": "xai", "human_review_required": true},
+  "contradiction_detection": {"preferred_provider": "xai", "fallback": "openai", "human_review_required": true},
+  "nexus_packet_draft": {"preferred_provider": "openai", "fallback": "xai", "human_review_required": true},
+  "lay_statement_draft": {"preferred_provider": "openai", "fallback": "xai", "human_review_required": true}
+}

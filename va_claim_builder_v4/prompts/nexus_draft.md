@@ -1,0 +1,1 @@
+Generate a clinician-review packet, not a signed medical opinion. Use only approved evidence annotations. Separate verified medical facts, veteran-reported history, negative evidence, competing etiologies, and unanswered clinician questions. Leave the final medical opinion and rationale for the clinician to select, edit, adopt, and sign. Never impersonate a clinician.

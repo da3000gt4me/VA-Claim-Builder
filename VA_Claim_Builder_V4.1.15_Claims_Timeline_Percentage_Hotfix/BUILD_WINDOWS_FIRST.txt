@@ -1,0 +1,7 @@
+VA Claim Builder 4.1 — Windows Build
+1. Install Python 3.12 (64-bit), Git, and Inno Setup 6.
+2. Open PowerShell in va_claim_builder_v4.
+3. Run: powershell -ExecutionPolicy Bypass -File packaging\windows\build_windows.ps1
+4. Portable application: dist\VAClaimBuilder\VAClaimBuilder.exe
+5. Installer: packaging\windows\dist-installer\VA_Claim_Builder_4.1.0_Windows_Setup.exe
+For public distribution, sign the EXE and installer with an Authenticode certificate.

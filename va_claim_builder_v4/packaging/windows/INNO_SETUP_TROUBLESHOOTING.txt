@@ -1,0 +1,14 @@
+VA Claim Builder - Inno Setup detection
+
+The required compiler is ISCC.exe from Inno Setup 6.
+
+1. Confirm it exists:
+   Get-ChildItem "C:\" -Filter ISCC.exe -File -Recurse -ErrorAction SilentlyContinue | Select-Object -First 10 FullName
+
+2. If found in a custom location, set it for the current PowerShell window:
+   $env:ISCC_PATH="C:\Path\To\ISCC.exe"
+
+3. Re-run:
+   powershell -ExecutionPolicy Bypass -File packaging\windows\build_windows.ps1
+
+The warning does not invalidate the portable app at dist\VAClaimBuilder\VAClaimBuilder.exe.

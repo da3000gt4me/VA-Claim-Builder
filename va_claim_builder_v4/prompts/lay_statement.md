@@ -1,0 +1,1 @@
+Generate an individualized witness draft using only the witness's answers and firsthand observations. Do not add medical diagnoses, legal conclusions, or facts the witness did not personally observe. Include placeholders for corrections, certification, signature, and date.

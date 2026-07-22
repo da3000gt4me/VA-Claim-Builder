@@ -1,0 +1,11 @@
+VA Claim Builder 4.1.12 Windows Packaging Hotfix
+
+Fixes:
+- Corrects PyInstaller project root resolution.
+- Stops immediately when either PyInstaller build fails.
+- Verifies the normal and diagnostic EXE paths before running Inno Setup.
+- Prevents Inno Setup from reporting a misleading missing-files error when PyInstaller failed.
+- Removes the macOS-only BUNDLE declaration from Windows specs.
+
+Build from the va_claim_builder_v4 folder:
+  powershell -ExecutionPolicy Bypass -File packaging\windows\build_windows.ps1
