@@ -13,6 +13,7 @@ from ui_qt.timeline_page import TimelinePage
 from ui_qt.nexus_page import NexusPage
 from ui_qt.dbq_page import DBQPage
 from ui_qt.rating_strategy_page import RatingStrategyPage
+from ui_qt.optimizer_page import OptimizerPage
 
 
 class MainWindow(QMainWindow):
@@ -31,6 +32,7 @@ class MainWindow(QMainWindow):
         self.nexus_page = NexusPage(project)
         self.dbq_page = DBQPage(project)
         self.rating_strategy_page = RatingStrategyPage(project)
+        self.optimizer_page = OptimizerPage(project)
         self.settings_page = SettingsPage()
         self.settings_page.settings_saved.connect(
             lambda: self.statusBar().showMessage("AI settings saved", 3000)
@@ -43,6 +45,7 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.nexus_page, "Nexus Letters")
         self.tabs.addTab(self.dbq_page, "DBQ Assistant")
         self.tabs.addTab(self.rating_strategy_page, "Rating Strategy")
+        self.tabs.addTab(self.optimizer_page, "Claim Optimizer")
         self.tabs.addTab(self.settings_page, "Settings")
         self.setCentralWidget(self.tabs)
 
@@ -80,6 +83,10 @@ class MainWindow(QMainWindow):
         rating_action = QAction("Open Rating Strategy", self)
         rating_action.triggered.connect(lambda: self.tabs.setCurrentWidget(self.rating_strategy_page))
         rating_menu.addAction(rating_action)
+        optimizer_menu = self.menuBar().addMenu("Claim Optimizer")
+        optimizer_action = QAction("Open Claim Optimizer", self)
+        optimizer_action.triggered.connect(lambda: self.tabs.setCurrentWidget(self.optimizer_page))
+        optimizer_menu.addAction(optimizer_action)
 
         settings_menu = self.menuBar().addMenu("Settings")
         ai_settings_action = QAction("AI & Privacy Settings", self)
@@ -101,6 +108,7 @@ class MainWindow(QMainWindow):
         self.nexus_page.refresh()
         self.dbq_page.refresh()
         self.rating_strategy_page.refresh()
+        self.optimizer_page.refresh()
         self.settings_page.load()
         self.statusBar().showMessage("Workspace refreshed", 3000)
 

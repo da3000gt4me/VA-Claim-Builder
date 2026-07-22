@@ -30,7 +30,7 @@ def test_create_project_initializes_manifest_database_and_folders(tmp_path: Path
 
     with sqlite3.connect(project.database_path) as connection:
         version = connection.execute("SELECT value FROM schema_metadata WHERE key='schema_version'").fetchone()
-    assert version == ("8",)
+    assert version == ("9",)
 
 
 def test_open_project_restores_missing_required_folder(tmp_path: Path) -> None:

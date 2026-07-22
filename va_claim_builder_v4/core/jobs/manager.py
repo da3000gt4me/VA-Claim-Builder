@@ -144,6 +144,16 @@ class JobManager:
                     "WHERE status='pending' AND job_id IN (SELECT job_id FROM jobs WHERE status='interrupted')",
                     (_utc_now(),),
                 )
+            optimizer_table = connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='optimizer_assessments'"
+            ).fetchone()
+            if optimizer_table:
+                connection.execute(
+                    "UPDATE optimizer_assessments SET status='failed', "
+                    "error_message='Application closed before optimization completed', updated_at=? "
+                    "WHERE status='pending' AND job_id IN (SELECT job_id FROM jobs WHERE status='interrupted')",
+                    (_utc_now(),),
+                )
             connection.commit()
             return cursor.rowcount
 

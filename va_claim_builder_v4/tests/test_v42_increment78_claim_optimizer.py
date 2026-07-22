@@ -1,0 +1,38 @@
+from __future__ import annotations
+import sqlite3
+from docx import Document
+import pytest
+from core.ai.types import AIResponse
+from core.claims import ClaimManager
+from core.evidence import EvidenceManager
+from core.jobs import JobManager
+from core.optimizer import ClaimOptimizerEngine,GAP_CATEGORIES,OptimizerError,OptimizerManager
+from core.projects import AppPaths,ProjectManager
+from core.rating_strategy import RatingStrategyManager
+from core.settings import AISettings,SettingsManager
+from workers import OptimizerWorker
+def setup(tmp,**data):root=tmp/"app";paths=AppPaths(root=root,projects=root/"Projects",logs=root/"Logs",backups=root/"Backups",settings_file=root/"settings.json").ensure();p=ProjectManager(paths).create_project("Optimize");c=ClaimManager(p).create("Back strain",**data);return p,paths,c
+def payload(gaps=None,actions=None):return {"gaps":gaps or [],"actions":actions or [],"reasoning":"Advisory recommendations prioritize unresolved material gaps."}
+class Router:
+ def __init__(self,data=None,error=None):self.data=data;self.error=error;self.requests=[]
+ def generate(self,request):self.requests.append(request);(_ for _ in ()).throw(self.error) if self.error else None;return AIResponse(provider="openai",model="fake",text="",parsed=self.data)
+def engine(p,paths,router,settings=None):sm=SettingsManager(paths);sm.save_ai_settings(settings or AISettings(openai_api_key="key"));return ClaimOptimizerEngine(p,settings_manager=sm,router_factory=lambda _:router)
+def test_migration_taxonomy_manager_history_crud_reopen_and_decisions(tmp_path):
+ p,paths,c=setup(tmp_path);m=OptimizerManager(p);a=m.create(c.claim_id,status="completed",overall_score=25);g=m.add_gap(a.assessment_id,"missing_current_diagnosis","No diagnosis",priority=1);m.update_gap(g.gap_id,responsible_party="provider",follow_up_date="2026-08-01",notes="requested");m.resolve_gap(g.gap_id);assert m.get_gap(g.gap_id).status=="resolved";m.reopen_gap(g.gap_id);m.not_applicable(g.gap_id,"not relevant");assert m.get_gap(g.gap_id).status=="not_applicable";manual=m.add_gap(a.assessment_id,"unsupported_factual_assertion","Manual",origin="manual");m.reject_gap(manual.gap_id);action=m.add_action(a.assessment_id,"Obtain diagnosis",priority=1,expected_value="high",effort_level="medium");m.update_action(action.action_id,status="completed",completion_notes="done");assert m.actions(a.assessment_id,"completed") and m.gaps(a.assessment_id,category="missing_current_diagnosis",status="not_applicable");assert "missing_buddy_statement" in GAP_CATEGORIES and len(GAP_CATEGORIES)==28
+ reopened=OptimizerManager(ProjectManager(paths).open_project(p.root));assert reopened.get(a.assessment_id).overall_score==25;m.delete(a.assessment_id)
+ with sqlite3.connect(p.database_path) as db:assert db.execute("SELECT value FROM schema_metadata WHERE key='schema_version'").fetchone()==("9",)
+def test_deterministic_scoring_explanation_priority_traceability_and_contradictions(tmp_path):
+ p,paths,c=setup(tmp_path,notes="SSN 123-45-6789");RatingStrategyManager(p).create(c.claim_id,status="completed",confidence="low",contradictory_evidence=["Conflicting diagnoses: strain, arthritis","Conflicting dates for evaluation: 2020, 2021","Conflicting severity descriptions: mild, severe","Conflicting provider opinion language appears"]);ev=EvidenceManager(p).create("Duplicate note",duplicate_of_evidence_id=None);EvidenceManager(p).link_claim(ev.evidence_id,c.claim_id);router=Router(payload());result=engine(p,paths,router).analyze(c.claim_id);m=OptimizerManager(p);gaps=m.gaps(result.assessment_id)
+ assert result.overall_score==round(result.service_connection_score*.35+result.severity_rating_score*.3+result.evidence_quality_score*.2+result.evidence_consistency_score*.15);assert "formula" in result.score_explanation and "guarantee" in result.score_explanation["disclaimer"];assert [g.priority for g in gaps]==sorted(g.priority for g in gaps);cats={g.category for g in gaps};assert {"missing_current_diagnosis","weak_in_service_event","weak_nexus_evidence","conflicting_diagnosis","conflicting_date","conflicting_severity","conflicting_provider_opinion"}<=cats;assert any(g.evidence_basis for g in gaps if g.category.startswith("conflicting"));assert "123-45-6789" not in router.requests[0].user_prompt
+def test_preserved_decisions_completed_action_suppression_and_ai_review(tmp_path):
+ p,paths,c=setup(tmp_path);s=engine(p,paths,Router(payload()));first=s.analyze(c.claim_id);m=OptimizerManager(p);gap=next(g for g in m.gaps(first.assessment_id) if g.category=="missing_current_diagnosis");m.resolve_gap(gap.gap_id,"obtaining records");m.update_gap(gap.gap_id,responsible_party="provider");action=m.actions(first.assessment_id)[0];m.update_action(action.action_id,status="completed")
+ ai_gap={"category":"missing_buddy_statement","description":"Buddy statement may corroborate event","severity":"low","priority":5,"confidence":"low","evidence_basis":[],"recommended_resolution":"Ask a witness with personal knowledge","responsible_party":"service buddy"};second=engine(p,paths,Router(payload([ai_gap],[{"description":action.description,"priority":1,"expected_value":"high","effort_level":"low","dependency":""}]))).analyze(c.claim_id);preserved=next(g for g in m.gaps(second.assessment_id) if g.category=="missing_current_diagnosis");assert preserved.status=="resolved" and preserved.responsible_party=="provider";assert all(a.description!=action.description for a in m.actions(second.assessment_id));suggested=next(g for g in m.gaps(second.assessment_id) if g.category=="missing_buddy_statement");assert suggested.origin=="ai" and suggested.user_confirmation=="pending";m.reject_gap(suggested.gap_id);assert m.get_gap(suggested.gap_id).status=="rejected"
+def test_lay_and_provider_docx_exports(tmp_path):
+ p,_,c=setup(tmp_path,symptoms="Pain with lifting",service_event="Training injury",description="Symptoms continued");m=OptimizerManager(p);a=m.create(c.claim_id,status="completed");m.add_gap(a.assessment_id,"weak_nexus_evidence","Nexus missing",recommended_resolution="Please address whether the condition is related to service",evidence_basis=["Treatment summary"]);lay=m.export_lay_statement(a.assessment_id,tmp_path/"lay.docx","spouse");provider=m.export_provider_request(a.assessment_id,tmp_path/"provider.docx");lt="\n".join(x.text for x in Document(lay).paragraphs);pt="\n".join(x.text for x in Document(provider).paragraphs);assert "actual witness" in lt and "personally know" in lt and "Signature" in lt and a.assessment_id not in lt;assert "does not ask or require a favorable conclusion" in pt and "Provider name/signature" in pt and "Treatment summary" in pt and a.assessment_id not in pt
+def test_local_only_malformed_failure_cancel_and_recovery(tmp_path):
+ p,paths,c=setup(tmp_path);router=Router(payload());local=engine(p,paths,router,AISettings(local_only=True,openai_api_key="key"))
+ with pytest.raises(OptimizerError,match="local-only"):local.analyze(c.claim_id)
+ assert not router.requests
+ for bad,match in ((Router({"wrong":[]}),"malformed"),(Router(error=TimeoutError()),"timed out")):
+  with pytest.raises(OptimizerError,match=match):engine(p,paths,bad).analyze(c.claim_id)
+ normal=engine(p,paths,Router(payload()));w=OptimizerWorker(p,[c.claim_id],engine_factory=lambda _:normal);w.cancel();w.run();assert JobManager(p).get(w.job.job_id).status=="cancelled";j=JobManager(p).create("claim_optimizer");JobManager(p).update(j.job_id,status="running");pending=normal.create_pending(c.claim_id,j.job_id);JobManager(p).recover_interrupted();assert normal.manager.get(pending.assessment_id).status=="failed"
