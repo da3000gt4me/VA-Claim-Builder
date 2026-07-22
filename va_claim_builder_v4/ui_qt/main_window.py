@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QLabel, QMainWindow, QStatusBar, QVBoxLayout, QWidget
+from PySide6.QtGui import QAction
+from PySide6.QtWidgets import QMainWindow, QMessageBox, QStatusBar, QTabWidget
 
 from core.projects import ProjectInfo
+from ui_qt.documents_page import DocumentsPage
 
 
 class MainWindow(QMainWindow):
@@ -13,22 +14,32 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(f"VA Claim Builder 4.2 — {project.name}")
         self.resize(1180, 760)
 
-        title = QLabel("VA Claim Builder 4.2")
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title.setStyleSheet("font-size: 26px; font-weight: 600;")
-        project_label = QLabel(f"Persistent project: {project.name}\n{project.root}")
-        project_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        project_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.tabs = QTabWidget()
+        self.documents_page = DocumentsPage(project)
+        self.tabs.addTab(self.documents_page, "Documents")
+        self.setCentralWidget(self.tabs)
 
-        layout = QVBoxLayout()
-        layout.addStretch()
-        layout.addWidget(title)
-        layout.addWidget(project_label)
-        layout.addStretch()
-        container = QWidget()
-        container.setLayout(layout)
-        self.setCentralWidget(container)
+        project_menu = self.menuBar().addMenu("Project")
+        refresh_action = QAction("Refresh Documents", self)
+        refresh_action.triggered.connect(self.documents_page.refresh)
+        project_menu.addAction(refresh_action)
+
+        project_info_action = QAction("Project Information", self)
+        project_info_action.triggered.connect(self._show_project_information)
+        project_menu.addAction(project_info_action)
 
         status = QStatusBar()
-        status.showMessage("Project loaded")
+        status.showMessage(f"Project loaded: {project.name}")
         self.setStatusBar(status)
+
+    def _show_project_information(self) -> None:
+        QMessageBox.information(
+            self,
+            "Project Information",
+            (
+                f"Name: {self.project.name}\n"
+                f"Project ID: {self.project.project_id}\n"
+                f"Location: {self.project.root}\n"
+                f"Created: {self.project.created_at}"
+            ),
+        )
