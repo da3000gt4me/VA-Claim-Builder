@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import json
@@ -65,6 +64,10 @@ def test_fake_windows_build_creates_portable_zip_manifest_and_checksums(monkeypa
     def fake_run(command, **kwargs):
         kwargs["log"].parent.mkdir(parents=True, exist_ok=True)
         kwargs["log"].write_text("synthetic build log", encoding="utf-8")
+        if any("verify_packaging_dependencies.py" in str(part) for part in command):
+            preflight = Path(command[command.index("--output") + 1])
+            preflight.parent.mkdir(parents=True, exist_ok=True)
+            preflight.write_text('{"passed": true}', encoding="utf-8")
         if "PyInstaller" in command:
             dist = Path(command[command.index("--distpath") + 1])
             collection = dist / "VAClaimBuilder"
@@ -85,3 +88,4 @@ def test_fake_windows_build_creates_portable_zip_manifest_and_checksums(monkeypa
     assert manifest["version"] == "4.2.0rc3"
     assert any(item["name"] == archive.name for item in manifest["artifacts"])
     assert archive.name in (release / "SHA256SUMS.txt").read_text(encoding="utf-8")
+

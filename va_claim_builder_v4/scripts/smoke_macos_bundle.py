@@ -49,9 +49,10 @@ def main() -> int:
     executable = bundle_executable(args.app.resolve())
     with tempfile.TemporaryDirectory(prefix="vcb-rc2-smoke-") as temporary:
         root = Path(temporary)
+        runtime = run_mode(executable, root / "Runtime Application Data", root / "runtime.json", "VCB_PACKAGED_RUNTIME_DIAGNOSTIC", args.timeout)
         ui = run_mode(executable, root / "UI Application Data", root / "ui.json", "VCB_PACKAGED_UI_SMOKE_MARKER", args.timeout)
         workflow = run_mode(executable, root / "Workflow Application Data", root / "workflow.json", "VCB_PACKAGED_SMOKE_OUTPUT", args.timeout)
-        result = {"bundle": str(args.app.resolve()), "ui": ui, "workflow": workflow}
+        result = {"bundle": str(args.app.resolve()), "runtime": runtime, "ui": ui, "workflow": workflow}
         output = args.output or args.app.parent / "packaged-smoke-result.json"
         output.write_text(json.dumps(result, indent=2), encoding="utf-8")
         manifest_path = output.parent / "release-manifest.json"
@@ -70,3 +71,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

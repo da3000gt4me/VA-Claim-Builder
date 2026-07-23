@@ -1,7 +1,7 @@
-
 from pathlib import Path
 import os
 import sys
+from PyInstaller.utils.hooks import collect_dynamic_libs
 
 root = Path(os.environ.get("VCB_SOURCE_ROOT", Path.cwd())).resolve()
 import json
@@ -10,8 +10,11 @@ version_data = json.loads(version_file.read_text(encoding="utf-8"))
 documentation = ["USER_GUIDE.md", "QUICK_START.md", "INSTALLATION.md", "BACKUP_RESTORE.md", "PRIVACY_DATA_HANDLING.md", "TROUBLESHOOTING.md", "KNOWN_LIMITATIONS.md", "RELEASE_NOTES_4.2.0_RC1.md", "RELEASE_NOTES_4.2.0_RC2.md", "RELEASE_NOTES_4.2.0_RC4.md", "RC4_INTAKE_AUDIT.md"]
 datas = [(str(version_file), "."), (str(root / "prompts"), "prompts")]
 datas += [(str(root / "docs" / name), "docs") for name in documentation]
-binaries = []
-hiddenimports = ["PySide6.QtCore", "PySide6.QtGui", "PySide6.QtWidgets"]
+binaries = collect_dynamic_libs("numpy")
+hiddenimports = [
+    "PySide6.QtCore", "PySide6.QtGui", "PySide6.QtWidgets",
+    "numpy.core._multiarray_umath",
+]
 
 analysis = Analysis(
     [str(root / "desktop_app.py")],
@@ -20,7 +23,7 @@ analysis = Analysis(
     datas=datas,
     hiddenimports=hiddenimports,
     excludes=[
-        "pytest", "tests", "streamlit", "pandas", "pyarrow", "numpy",
+        "pytest", "tests", "streamlit", "pandas", "pyarrow",
         "matplotlib", "IPython", "notebook", "jupyter", "tkinter",
         "sqlalchemy.testing", "setuptools", "pip",
     ],
@@ -44,3 +47,4 @@ if sys.platform == "darwin":
         bundle_identifier="com.vaclaimbuilder.desktop",
         info_plist={"CFBundleShortVersionString": version_data["display_version"], "CFBundleVersion": version_data["version"], "LSMinimumSystemVersion": "12.0"},
     )
+
