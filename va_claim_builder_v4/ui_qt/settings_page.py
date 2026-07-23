@@ -1,3 +1,4 @@
+
 from __future__ import annotations
 
 from PySide6.QtCore import Signal
@@ -46,6 +47,13 @@ class SettingsPage(QWidget):
         self.xai_model = QLineEdit()
         self.local_only = QCheckBox("Disable all cloud AI calls")
         self.redact = QCheckBox("Redact identifiers before cloud AI calls")
+        self.auto_analyze = QCheckBox("Automatically analyze after import")
+        self.auto_ocr = QCheckBox("Automatically OCR image-only documents when available")
+        self.allow_cloud = QCheckBox("Allow optional cloud enhancement")
+        self.claim_suggestions = QCheckBox("Create claim suggestions")
+        self.timeline_suggestions = QCheckBox("Create timeline suggestions")
+        self.evidence_suggestions = QCheckBox("Create evidence suggestions")
+        self.relationship_suggestions = QCheckBox("Create relationship suggestions")
 
         provider_box = QGroupBox("Providers")
         provider_form = QFormLayout(provider_box)
@@ -60,6 +68,13 @@ class SettingsPage(QWidget):
         privacy_layout = QVBoxLayout(privacy_box)
         privacy_layout.addWidget(self.local_only)
         privacy_layout.addWidget(self.redact)
+        automation_box = QGroupBox("Automated Intake")
+        automation_layout = QVBoxLayout(automation_box)
+        for control in (
+            self.auto_analyze, self.auto_ocr, self.allow_cloud, self.claim_suggestions,
+            self.timeline_suggestions, self.evidence_suggestions, self.relationship_suggestions,
+        ):
+            automation_layout.addWidget(control)
 
         self.save_button = QPushButton("Save Settings")
         self.save_button.clicked.connect(self.save)
@@ -79,6 +94,7 @@ class SettingsPage(QWidget):
         layout.addWidget(description)
         layout.addWidget(provider_box)
         layout.addWidget(privacy_box)
+        layout.addWidget(automation_box)
         layout.addLayout(button_row)
         layout.addStretch()
         self.load()
@@ -93,6 +109,14 @@ class SettingsPage(QWidget):
         self.xai_model.setText(settings.model_xai)
         self.local_only.setChecked(settings.local_only)
         self.redact.setChecked(settings.redact_before_cloud)
+        app = self.manager.load_app_settings()
+        self.auto_analyze.setChecked(app["automatic_analysis_after_import"])
+        self.auto_ocr.setChecked(app["automatic_ocr"])
+        self.allow_cloud.setChecked(app["allow_cloud_enhancement"])
+        self.claim_suggestions.setChecked(app["create_claim_suggestions"])
+        self.timeline_suggestions.setChecked(app["create_timeline_suggestions"])
+        self.evidence_suggestions.setChecked(app["create_evidence_suggestions"])
+        self.relationship_suggestions.setChecked(app["create_relationship_suggestions"])
 
     def save(self) -> None:
         settings = AISettings(
@@ -109,6 +133,17 @@ class SettingsPage(QWidget):
             settings.fallback_provider = ""
             self.fallback.setCurrentText("")
         self.manager.save_ai_settings(settings)
+        app = self.manager.load_app_settings()
+        app.update({
+            "automatic_analysis_after_import": self.auto_analyze.isChecked(),
+            "automatic_ocr": self.auto_ocr.isChecked(),
+            "allow_cloud_enhancement": self.allow_cloud.isChecked(),
+            "create_claim_suggestions": self.claim_suggestions.isChecked(),
+            "create_timeline_suggestions": self.timeline_suggestions.isChecked(),
+            "create_evidence_suggestions": self.evidence_suggestions.isChecked(),
+            "create_relationship_suggestions": self.relationship_suggestions.isChecked(),
+        })
+        self.manager.save_app_settings(app)
         self.manager.apply_to_environment(settings)
         self.settings_saved.emit()
         QMessageBox.information(self, "Settings saved", "AI and privacy settings were saved securely.")

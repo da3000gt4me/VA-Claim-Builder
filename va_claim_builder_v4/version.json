@@ -1,6 +1,7 @@
+
 {
-  "version": "4.2.0rc2",
-  "display_version": "4.2.0 RC2",
+  "version": "4.2.0rc4",
+  "display_version": "4.2.0 RC4",
   "release_channel": "release-candidate",
   "schema_version": 10
 }

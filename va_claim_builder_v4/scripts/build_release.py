@@ -1,3 +1,4 @@
+
 from __future__ import annotations
 
 import argparse
@@ -25,6 +26,16 @@ def checksum(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def copytree_portable(source: Path, destination: Path, *, symlinks: bool = True) -> None:
+    """Copy a release tree without failing at Windows' legacy MAX_PATH boundary."""
+    if os.name == "nt":
+        source_value = "\\\\?\\" + str(source.resolve())
+        destination_value = "\\\\?\\" + str(destination.resolve())
+        shutil.copytree(source_value, destination_value, symlinks=symlinks)
+    else:
+        shutil.copytree(source, destination, symlinks=symlinks)
 
 
 def architecture_report() -> dict[str, str]:
@@ -146,7 +157,7 @@ def main(argv: list[str] | None = None) -> int:
             raise RuntimeError(f"PyInstaller completed without producing {app}")
         pending.mkdir(parents=True)
         if app.exists():
-            shutil.copytree(app, pending / app.name, symlinks=True)
+            copytree_portable(app, pending / app.name)
             if args.adhoc_sign:
                 run_logged(["codesign", "--force", "--deep", "--sign", "-", str(pending / app.name)], cwd=ROOT, log=failure_log, timeout=120)
             archive = pending / f"{app.stem}-{version['display_version'].replace(' ', '-')}-{platform.machine()}.zip"
@@ -155,7 +166,7 @@ def main(argv: list[str] | None = None) -> int:
             collection = staging_dist / "VAClaimBuilder"
             if not collection.exists():
                 raise RuntimeError("PyInstaller completed without producing an application collection")
-            shutil.copytree(collection, pending / collection.name, symlinks=True)
+            copytree_portable(collection, pending / collection.name)
             if args.platform in {"windows", "portable"}:
                 suffix = "Windows-x64" if args.platform == "windows" else f"portable-{machine}"
                 archive_name = f"VA Claim Builder-{version['display_version'].replace(' ', '-')}-{suffix}"

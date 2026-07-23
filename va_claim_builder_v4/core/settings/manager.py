@@ -1,3 +1,4 @@
+
 from __future__ import annotations
 
 import json
@@ -31,7 +32,7 @@ class SettingsManager:
         self.key_path = self.paths.home / ".settings.key"
 
     APP_DEFAULTS = {
-        "settings_version": 1,
+        "settings_version": 2,
         "backup_retention": 10,
         "backup_include_sources": True,
         "log_level": "INFO",
@@ -39,6 +40,19 @@ class SettingsManager:
         "last_export_path": "",
         "window_geometry": "",
         "splitter_state": "",
+        "automatic_analysis_after_import": True,
+        "automatic_ocr": True,
+        "allow_cloud_enhancement": False,
+        "minimum_draft_confidence": 0.60,
+        "minimum_autolink_confidence": 0.75,
+        "create_claim_suggestions": True,
+        "create_timeline_suggestions": True,
+        "create_evidence_suggestions": True,
+        "create_relationship_suggestions": True,
+        "run_optimizer_after_intake": False,
+        "run_rating_strategy_after_intake": False,
+        "notify_when_complete": True,
+        "preserve_rejected_suggestions": True,
     }
 
     def load_app_settings(self) -> dict:

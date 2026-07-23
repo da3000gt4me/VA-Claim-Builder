@@ -1,3 +1,4 @@
+
 from __future__ import annotations
 
 import json
@@ -14,9 +15,9 @@ from scripts import build_release
 from scripts.smoke_macos_bundle import bundle_executable
 
 
-def test_rc2_version_uses_bundled_authoritative_resource() -> None:
-    assert BUILD_VERSION.startswith("4.2.0rc2")
-    assert DISPLAY_VERSION == "4.2.0 RC2"
+def test_rc4_version_uses_bundled_authoritative_resource() -> None:
+    assert BUILD_VERSION.startswith("4.2.0rc4")
+    assert DISPLAY_VERSION == "4.2.0 RC4"
 
 
 def test_resource_resolution_for_source_and_frozen(monkeypatch, tmp_path: Path) -> None:

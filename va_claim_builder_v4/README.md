@@ -1,4 +1,15 @@
-# VA Claim Builder Version 4.2.0 RC2
+
+# VA Claim Builder Version 4.2.0 RC4
+
+RC4 adds local-first automated intake. With **Automatically analyze imported
+documents** enabled (the default), files proceed from fingerprinting and text
+extraction through draft evidence, claim matching, claim suggestions, medical
+timeline events, relationship indicators, contradictions, and gaps. Results
+remain review items and never replace confirmed user text.
+
+Use **Automation Review** for progress, failures, and bulk
+accept/reject/defer actions. Cloud enhancement is disabled by default; importing
+a document never sends it to a provider.
 
 VA Claim Builder is a local-first PySide6 desktop application for organizing documents, OCR, claims, evidence, timelines, nexus and DBQ preparation, rating strategy, optimization, and local submission packages.
 

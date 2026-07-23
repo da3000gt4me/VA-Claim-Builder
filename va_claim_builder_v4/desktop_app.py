@@ -1,3 +1,4 @@
+
 from __future__ import annotations
 
 import logging
@@ -50,7 +51,7 @@ def main() -> int:
             return 2
     ui_smoke_marker = os.environ.get("VCB_PACKAGED_UI_SMOKE_MARKER")
     if ui_smoke_marker:
-        project = manager.create_project("RC2 UI Smoke")
+        project = manager.create_project("RC4 UI Smoke")
         window = MainWindow(project)
         window.show()
 

@@ -1,3 +1,4 @@
+
 from .document_import_worker import DocumentImportWorker
 
 from .evidence_analysis_worker import EvidenceAnalysisWorker
@@ -9,3 +10,4 @@ from .optimizer_worker import OptimizerWorker
 from .submission_generation_worker import SubmissionGenerationWorker
 
 __all__ = ["DocumentImportWorker", "EvidenceAnalysisWorker", "TimelineExtractionWorker", "NexusGenerationWorker", "DBQPreparationWorker", "RatingStrategyWorker", "OptimizerWorker", "SubmissionGenerationWorker"]
+from .automated_intake_worker import AutomatedIntakeWorker
