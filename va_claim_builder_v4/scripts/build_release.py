@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import argparse
@@ -89,7 +88,7 @@ def run_logged(command: list[str], *, cwd: Path, log: Path, timeout: int, env: d
 
 
 def dependency_report() -> dict[str, str]:
-    names = ("PyInstaller", "PySide6", "shiboken6", "pydantic", "openai", "httpx", "pypdf", "Pillow", "pytesseract", "cryptography", "tenacity", "python-docx")
+    names = ("PyInstaller", "PySide6", "shiboken6", "pydantic", "openai", "httpx", "pypdf", "Pillow", "pytesseract", "cryptography", "tenacity", "python-docx", "numpy")
     report = {}
     for name in names:
         try:
@@ -148,6 +147,11 @@ def main(argv: list[str] | None = None) -> int:
     packaged_version_file.write_text(json.dumps(version, indent=2), encoding="utf-8")
     env["VCB_VERSION_FILE"] = str(packaged_version_file)
     try:
+        preflight = build_root / "dependency-preflight.json"
+        run_logged(
+            [sys.executable, str(ROOT / "scripts" / "verify_packaging_dependencies.py"), "--output", str(preflight)],
+            cwd=ROOT, log=failure_log, timeout=120, env=env,
+        )
         if not args.skip_tests:
             run_logged([sys.executable, "-m", "pytest", "-q"], cwd=ROOT, log=failure_log, timeout=args.timeout, env=env)
         command = build_command(ROOT / "packaging" / "VAClaimBuilder.spec", staging_dist, work, verbose=args.verbose or args.diagnostic)
@@ -174,6 +178,7 @@ def main(argv: list[str] | None = None) -> int:
         report = {"architecture": architecture_report(), "dependencies": dependency_report()}
         (pending / "dependency-versions.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
         shutil.copy2(failure_log, pending / "build.log")
+        shutil.copy2(preflight, pending / preflight.name)
         artifacts = [path for path in pending.iterdir() if path.is_file() and path.name not in {"release-manifest.json", "SHA256SUMS.txt"}]
         manifest = {
             "application": "VA Claim Builder", "version": version["version"], "display_version": version["display_version"],
@@ -201,3 +206,4 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
