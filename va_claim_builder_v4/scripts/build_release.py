@@ -37,6 +37,16 @@ def architecture_report() -> dict[str, str]:
     }
 
 
+def machine_label(machine: str | None = None) -> str:
+    value = machine or platform.machine()
+    return "x64" if value.lower() in {"amd64", "x86_64"} else value
+
+
+def release_directory_name(display_version: str, target: str, machine: str | None = None) -> str:
+    platform_label = {"macos": "macOS", "windows": "Windows", "linux": "Linux", "portable": "portable"}[target]
+    return f"VAClaimBuilder-{display_version.replace(' ', '-')}-{platform_label}-{machine_label(machine)}"
+
+
 def build_command(spec: Path, dist: Path, work: Path, *, verbose: bool = False) -> list[str]:
     command = [sys.executable, "-m", "PyInstaller", "--clean", "--noconfirm", "--distpath", str(dist), "--workpath", str(work)]
     if verbose:
@@ -89,12 +99,18 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--keep-work", action="store_true")
     result.add_argument("--timeout", type=int, default=900)
     result.add_argument("--adhoc-sign", action="store_true")
+    result.add_argument("--release-version", help="Override packaged PEP 440 version, for example 4.2.0rc3")
+    result.add_argument("--display-version", help="Override packaged display version, for example '4.2.0 RC3'")
     return result
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
     version = json.loads((ROOT / "version.json").read_text(encoding="utf-8"))
+    if args.release_version or args.display_version:
+        if not (args.release_version and args.display_version):
+            raise SystemExit("--release-version and --display-version must be provided together")
+        version = {**version, "version": args.release_version, "display_version": args.display_version}
     output_root = args.output_dir.expanduser().resolve()
     output_root.mkdir(parents=True, exist_ok=True)
     if args.clean:
@@ -106,7 +122,8 @@ def main(argv: list[str] | None = None) -> int:
     staging_dist = build_root / "dist"
     work = build_root / "work"
     failure_log = output_root / "build-logs" / f"macos-build-{stamp}.log"
-    final_name = f"VAClaimBuilder-{version['display_version'].replace(' ', '-')}-{args.platform}-{platform.machine()}"
+    machine = machine_label()
+    final_name = release_directory_name(version["display_version"], args.platform, machine)
     final = output_root / final_name
     pending = output_root / f".{final_name}.incomplete-{uuid.uuid4().hex[:8]}"
     started = time.monotonic()
@@ -115,6 +132,10 @@ def main(argv: list[str] | None = None) -> int:
     env = dict(os.environ)
     env["VCB_SOURCE_ROOT"] = str(ROOT)
     env["PYINSTALLER_CONFIG_DIR"] = str(build_root / "pyinstaller-config")
+    packaged_version_file = build_root / "version.json"
+    packaged_version_file.parent.mkdir(parents=True, exist_ok=True)
+    packaged_version_file.write_text(json.dumps(version, indent=2), encoding="utf-8")
+    env["VCB_VERSION_FILE"] = str(packaged_version_file)
     try:
         if not args.skip_tests:
             run_logged([sys.executable, "-m", "pytest", "-q"], cwd=ROOT, log=failure_log, timeout=args.timeout, env=env)
@@ -135,8 +156,10 @@ def main(argv: list[str] | None = None) -> int:
             if not collection.exists():
                 raise RuntimeError("PyInstaller completed without producing an application collection")
             shutil.copytree(collection, pending / collection.name, symlinks=True)
-            if args.platform == "portable":
-                shutil.make_archive(str(pending / f"VAClaimBuilder-{version['display_version'].replace(' ', '-')}-portable"), "zip", pending, collection.name)
+            if args.platform in {"windows", "portable"}:
+                suffix = "Windows-x64" if args.platform == "windows" else f"portable-{machine}"
+                archive_name = f"VA Claim Builder-{version['display_version'].replace(' ', '-')}-{suffix}"
+                shutil.make_archive(str(pending / archive_name), "zip", pending, collection.name)
         report = {"architecture": architecture_report(), "dependencies": dependency_report()}
         (pending / "dependency-versions.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
         shutil.copy2(failure_log, pending / "build.log")

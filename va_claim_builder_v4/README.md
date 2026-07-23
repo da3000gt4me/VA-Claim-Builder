@@ -7,3 +7,7 @@ RC2 is packaged and smoke-tested on Apple Silicon macOS. It remains Release Cand
 Source execution requires Python 3.11 or 3.12. The verified macOS artifact is an ad hoc signed arm64 `.app`, not universal2 or notarized. After verifying its SHA-256 checksum, Gatekeeper may require Control-click > **Open**. User data is stored under `~/Library/Application Support/VA Claim Builder`. Windows and Linux builders remain configured but unverified.
 
 See [User Guide](docs/USER_GUIDE.md), [Installation](docs/INSTALLATION.md), [Privacy](docs/PRIVACY_DATA_HANDLING.md), and [RC2 Release Notes](docs/RELEASE_NOTES_4.2.0_RC2.md).
+
+## Download persistent builds
+
+Open the GitHub repository, choose **Actions**, select **Build VA Claim Builder 4.2 RC**, open a completed run, then download either platform artifact from **Artifacts**. Workflow artifacts are retained for 30 days. Explicitly published prereleases also appear on the Releases page.
