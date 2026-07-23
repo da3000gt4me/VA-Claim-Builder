@@ -11,10 +11,17 @@ from pathlib import Path
 
 
 def bundle_executable(app: Path) -> Path:
-    executable = app / "Contents" / "MacOS" / "VAClaimBuilder"
-    if not executable.is_file():
-        raise FileNotFoundError(f"Packaged executable is missing: {executable}")
-    return executable
+    if app.is_file():
+        return app
+    candidates = (
+        app / "Contents" / "MacOS" / "VAClaimBuilder",
+        app / "VAClaimBuilder.exe",
+        app / "VAClaimBuilder",
+    )
+    for executable in candidates:
+        if executable.is_file():
+            return executable
+    raise FileNotFoundError(f"Packaged executable is missing under: {app}")
 
 
 def run_mode(executable: Path, home: Path, marker: Path, variable: str, timeout: int) -> dict:
@@ -34,7 +41,7 @@ def run_mode(executable: Path, home: Path, marker: Path, variable: str, timeout:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Smoke-test the frozen macOS application bundle")
+    parser = argparse.ArgumentParser(description="Smoke-test a frozen VA Claim Builder application")
     parser.add_argument("app", type=Path)
     parser.add_argument("--timeout", type=int, default=60)
     parser.add_argument("--output", type=Path)

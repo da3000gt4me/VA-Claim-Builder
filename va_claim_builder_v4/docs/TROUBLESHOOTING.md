@@ -8,3 +8,4 @@
 - Export a sanitized diagnostic bundle from the Project menu when reporting a defect.
 - A Gatekeeper warning is expected for the unnotarized macOS RC; verify the checksum, then use Control-click > Open.
 - Failed packaging retains logs under `dist/release/build-logs` without replacing the last valid release.
+- If a build is missing, open the completed Actions run and inspect both platform jobs. Failed jobs intentionally upload no release artifact.

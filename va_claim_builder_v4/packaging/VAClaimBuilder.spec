@@ -4,9 +4,10 @@ import sys
 
 root = Path(os.environ.get("VCB_SOURCE_ROOT", Path.cwd())).resolve()
 import json
-version_data = json.loads((root / "version.json").read_text(encoding="utf-8"))
+version_file = Path(os.environ.get("VCB_VERSION_FILE", root / "version.json")).resolve()
+version_data = json.loads(version_file.read_text(encoding="utf-8"))
 documentation = ["USER_GUIDE.md", "QUICK_START.md", "INSTALLATION.md", "BACKUP_RESTORE.md", "PRIVACY_DATA_HANDLING.md", "TROUBLESHOOTING.md", "KNOWN_LIMITATIONS.md", "RELEASE_NOTES_4.2.0_RC1.md", "RELEASE_NOTES_4.2.0_RC2.md"]
-datas = [(str(root / "version.json"), "."), (str(root / "prompts"), "prompts")]
+datas = [(str(version_file), "."), (str(root / "prompts"), "prompts")]
 datas += [(str(root / "docs" / name), "docs") for name in documentation]
 binaries = []
 hiddenimports = ["PySide6.QtCore", "PySide6.QtGui", "PySide6.QtWidgets"]
