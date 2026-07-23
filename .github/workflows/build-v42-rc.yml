@@ -63,7 +63,7 @@ jobs:
           set -euo pipefail
           release="dist/release/VAClaimBuilder-4.2.0-RC4-macOS-arm64"
           test -d "$release/VA Claim Builder.app"
-          test -f "$release/VA Claim Builder-4.2.0-RC2-arm64.zip"
+          test -f "$release/VA Claim Builder-4.2.0-RC4-arm64.zip"
           for file in SHA256SUMS.txt release-manifest.json build.log dependency-versions.json packaged-smoke-result.json; do test -f "$release/$file"; done
           (cd "$release" && shasum -a 256 -c SHA256SUMS.txt)
       - name: Write macOS workflow summary
