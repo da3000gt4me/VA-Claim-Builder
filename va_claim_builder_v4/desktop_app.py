@@ -1,18 +1,55 @@
-
 from __future__ import annotations
 
 import logging
 from logging.handlers import RotatingFileHandler
 import os
 import sys
+import json
+import importlib.util
+import platform
+import traceback
+from pathlib import Path
 
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 from core.projects import ProjectManager
 from core.settings import SettingsManager
-from ui_qt import MainWindow, ProjectDialog
 from core.version import APP_NAME, BUILD_VERSION
+
+
+def write_packaged_runtime_diagnostic(output: str) -> bool:
+    """Verify the frozen numerical runtime before importing the application UI."""
+    report = {
+        "python_version": platform.python_version(),
+        "python_executable": sys.executable,
+        "python_architecture": platform.architecture()[0],
+        "machine": platform.machine(),
+        "frozen": bool(getattr(sys, "frozen", False)),
+        "sys_path": list(sys.path),
+    }
+    try:
+        import importlib.metadata
+        import numpy
+        import numpy.core._multiarray_umath
+        import cryptography
+        import pypdf
+
+        spec = importlib.util.find_spec("numpy")
+        report.update({
+            "passed": True,
+            "numpy_version": importlib.metadata.version("numpy"),
+            "numpy_file": getattr(numpy, "__file__", None),
+            "numpy_spec": repr(spec),
+            "numpy_ndarray_available": getattr(numpy, "ndarray", None) is not None,
+            "numpy_multiarray_imported": True,
+            "cryptography_version": importlib.metadata.version("cryptography"),
+            "pypdf_version": importlib.metadata.version("pypdf"),
+        })
+    except Exception:
+        report.update({"passed": False, "traceback": traceback.format_exc()})
+    Path(output).write_text(json.dumps(report, indent=2), encoding="utf-8")
+    return bool(report["passed"])
 
 
 def configure_logging(manager: ProjectManager) -> None:
@@ -30,6 +67,12 @@ def configure_logging(manager: ProjectManager) -> None:
 
 
 def main() -> int:
+    runtime_diagnostic = os.environ.get("VCB_PACKAGED_RUNTIME_DIAGNOSTIC")
+    if runtime_diagnostic:
+        return 0 if write_packaged_runtime_diagnostic(runtime_diagnostic) else 3
+
+    from ui_qt import MainWindow, ProjectDialog
+
     app = QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
     app.setApplicationVersion(BUILD_VERSION)
@@ -90,3 +133,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
