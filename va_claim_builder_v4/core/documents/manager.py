@@ -1,3 +1,4 @@
+
 from __future__ import annotations
 
 import hashlib
@@ -82,6 +83,10 @@ class DocumentManager:
                 ),
             )
             connection.commit()
+        from core.intake.manager import IntakeManager
+        from core.claims import ClaimManager
+        ClaimManager(self.project)
+        IntakeManager(self.project).ensure_document(document_id, digest)
         return self.get(document_id), True
 
     def import_files(self, sources: list[str | Path]) -> tuple[list[DocumentInfo], list[DocumentInfo]]:

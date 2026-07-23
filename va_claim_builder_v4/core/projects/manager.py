@@ -1,3 +1,4 @@
+
 from __future__ import annotations
 
 import json
@@ -394,8 +395,14 @@ class ProjectManager:
         )
         temp = destination.with_suffix(".incomplete")
         try:
-            with sqlite3.connect(database_path) as source, sqlite3.connect(temp) as target:
+            source = sqlite3.connect(database_path)
+            target = sqlite3.connect(temp)
+            try:
                 source.backup(target)
+                target.commit()
+            finally:
+                target.close()
+                source.close()
             temp.replace(destination)
             return destination
         except Exception:

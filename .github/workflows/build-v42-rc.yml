@@ -1,3 +1,4 @@
+
 name: Build VA Claim Builder 4.2 RC
 
 on:
@@ -12,10 +13,15 @@ on:
         description: Prerelease tag used only when publishing (for example v4.2.0-rc3)
         required: false
         type: string
-        default: v4.2.0-rc3
+        default: v4.2.0-rc4
   push:
+    branches:
+      - feature-v4.2-rc4-automated-intake
     tags:
       - "v4.2.0-rc*"
+  pull_request:
+    branches:
+      - feature-v4.2-phase1-increment1
 
 permissions:
   contents: read
@@ -36,6 +42,9 @@ jobs:
       - name: Install runtime and packaging dependencies
         working-directory: va_claim_builder_v4
         run: python -m pip install -r requirements-packaging.txt
+      - name: Run RC4 tests
+        working-directory: va_claim_builder_v4
+        run: python -m pytest -q
       - name: Build ad hoc signed macOS bundle
         id: build
         working-directory: va_claim_builder_v4
@@ -44,28 +53,28 @@ jobs:
         working-directory: va_claim_builder_v4
         run: >-
           python scripts/smoke_macos_bundle.py
-          "dist/release/VAClaimBuilder-4.2.0-RC2-macOS-arm64/VA Claim Builder.app"
+          "dist/release/VAClaimBuilder-4.2.0-RC4-macOS-arm64/VA Claim Builder.app"
           --timeout 90
-          --output "dist/release/VAClaimBuilder-4.2.0-RC2-macOS-arm64/packaged-smoke-result.json"
+          --output "dist/release/VAClaimBuilder-4.2.0-RC4-macOS-arm64/packaged-smoke-result.json"
       - name: Verify macOS outputs and checksums
         working-directory: va_claim_builder_v4
         shell: bash
         run: |
           set -euo pipefail
-          release="dist/release/VAClaimBuilder-4.2.0-RC2-macOS-arm64"
+          release="dist/release/VAClaimBuilder-4.2.0-RC4-macOS-arm64"
           test -d "$release/VA Claim Builder.app"
-          test -f "$release/VA Claim Builder-4.2.0-RC2-arm64.zip"
+          test -f "$release/VA Claim Builder-4.2.0-RC4-arm64.zip"
           for file in SHA256SUMS.txt release-manifest.json build.log dependency-versions.json packaged-smoke-result.json; do test -f "$release/$file"; done
           (cd "$release" && shasum -a 256 -c SHA256SUMS.txt)
       - name: Write macOS workflow summary
         working-directory: va_claim_builder_v4
         shell: bash
         run: |
-          release="dist/release/VAClaimBuilder-4.2.0-RC2-macOS-arm64"
+          release="dist/release/VAClaimBuilder-4.2.0-RC4-macOS-arm64"
           build_seconds=$(python -c "import json; print(json.load(open('$release/release-manifest.json'))['build_seconds'])")
           smoke=$(python -c "import json; print('PASS' if json.load(open('$release/release-manifest.json'))['packaged_smoke_test']['passed'] else 'FAIL')")
           {
-            echo "## VA-Claim-Builder-4.2.0-RC2-macOS-arm64"
+            echo "## VA-Claim-Builder-4.2.0-RC4-macOS-arm64"
             echo '```text'
             find "$release" -maxdepth 1 -type f -exec stat -f '%N | %z bytes' {} \; | sort
             echo
@@ -77,8 +86,8 @@ jobs:
       - name: Upload persistent macOS artifact
         uses: actions/upload-artifact@v4
         with:
-          name: VA-Claim-Builder-4.2.0-RC2-macOS-arm64
-          path: va_claim_builder_v4/dist/release/VAClaimBuilder-4.2.0-RC2-macOS-arm64/
+          name: VA-Claim-Builder-4.2.0-RC4-macOS-arm64
+          path: va_claim_builder_v4/dist/release/VAClaimBuilder-4.2.0-RC4-macOS-arm64/
           if-no-files-found: error
           retention-days: 30
 
@@ -88,6 +97,8 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+      - name: Install Inno Setup
+        run: choco install innosetup -y
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -97,26 +108,40 @@ jobs:
       - name: Install runtime and packaging dependencies
         working-directory: va_claim_builder_v4
         run: python -m pip install -r requirements-packaging.txt
+      - name: Run RC4 tests
+        working-directory: va_claim_builder_v4
+        run: python -m pytest -q
       - name: Build Windows portable application
         working-directory: va_claim_builder_v4
         run: >-
           python scripts/build_release.py windows --clean --skip-tests --timeout 900
-          --release-version 4.2.0rc3 --display-version "4.2.0 RC3"
+          --release-version 4.2.0rc4 --display-version "4.2.0 RC4"
       - name: Run packaged Windows smoke test
         working-directory: va_claim_builder_v4
         run: >-
           python scripts/smoke_macos_bundle.py
-          "dist/release/VAClaimBuilder-4.2.0-RC3-Windows-x64/VAClaimBuilder"
+          "dist/release/VAClaimBuilder-4.2.0-RC4-Windows-x64/VAClaimBuilder"
           --timeout 90
-          --output "dist/release/VAClaimBuilder-4.2.0-RC3-Windows-x64/packaged-smoke-result.json"
+          --output "dist/release/VAClaimBuilder-4.2.0-RC4-Windows-x64/packaged-smoke-result.json"
+      - name: Build Windows installer and refresh release checksums
+        working-directory: va_claim_builder_v4
+        shell: pwsh
+        run: |
+          $release = (Resolve-Path "dist/release/VAClaimBuilder-4.2.0-RC4-Windows-x64").Path
+          $source = Join-Path $release "VAClaimBuilder"
+          $compiler = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          & $compiler "/DMySourceDir=$source" "/DMyOutputDir=$release" "packaging\windows\installer.iss"
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
+          python scripts/finalize_release_artifacts.py $release
       - name: Verify Windows outputs and checksums
         working-directory: va_claim_builder_v4
         shell: pwsh
         run: |
-          $release = "dist/release/VAClaimBuilder-4.2.0-RC3-Windows-x64"
+          $release = "dist/release/VAClaimBuilder-4.2.0-RC4-Windows-x64"
           $required = @(
             "$release/VAClaimBuilder/VAClaimBuilder.exe",
-            "$release/VA Claim Builder-4.2.0-RC3-Windows-x64.zip",
+            "$release/VA Claim Builder-4.2.0-RC4-Windows-x64.zip",
+            "$release/VA_Claim_Builder_4.2.0_RC4_Windows_x64_Setup.exe",
             "$release/SHA256SUMS.txt", "$release/release-manifest.json", "$release/build.log",
             "$release/dependency-versions.json", "$release/packaged-smoke-result.json"
           )
@@ -130,8 +155,8 @@ jobs:
         working-directory: va_claim_builder_v4
         shell: pwsh
         run: |
-          $release = "dist/release/VAClaimBuilder-4.2.0-RC3-Windows-x64"
-          "## VA-Claim-Builder-4.2.0-RC3-Windows-x64" >> $env:GITHUB_STEP_SUMMARY
+          $release = "dist/release/VAClaimBuilder-4.2.0-RC4-Windows-x64"
+          "## VA-Claim-Builder-4.2.0-RC4-Windows-x64" >> $env:GITHUB_STEP_SUMMARY
           '```text' >> $env:GITHUB_STEP_SUMMARY
           Get-ChildItem $release -File | Sort-Object Name | ForEach-Object { "$($_.Name) | $($_.Length) bytes" } >> $env:GITHUB_STEP_SUMMARY
           "" >> $env:GITHUB_STEP_SUMMARY
@@ -143,8 +168,8 @@ jobs:
       - name: Upload persistent Windows artifact
         uses: actions/upload-artifact@v4
         with:
-          name: VA-Claim-Builder-4.2.0-RC3-Windows-x64
-          path: va_claim_builder_v4/dist/release/VAClaimBuilder-4.2.0-RC3-Windows-x64/
+          name: VA-Claim-Builder-4.2.0-RC4-Windows-x64
+          path: va_claim_builder_v4/dist/release/VAClaimBuilder-4.2.0-RC4-Windows-x64/
           if-no-files-found: error
           retention-days: 30
 
@@ -168,5 +193,5 @@ jobs:
         run: >-
           gh release create "$TAG_NAME" release-assets/*
           --repo "$GITHUB_REPOSITORY" --prerelease
-          --title "VA Claim Builder 4.2.0 RC3"
+          --title "VA Claim Builder 4.2.0 RC4"
           --notes "Release-candidate artifacts built and smoke-tested by GitHub Actions. Not a final production release."

@@ -1,3 +1,4 @@
+
 from __future__ import annotations
 
 from PySide6.QtCore import QUrl
@@ -16,6 +17,7 @@ from ui_qt.dbq_page import DBQPage
 from ui_qt.rating_strategy_page import RatingStrategyPage
 from ui_qt.optimizer_page import OptimizerPage
 from ui_qt.submission_page import SubmissionPage
+from ui_qt.intake_review_page import IntakeReviewPage
 from core.version import FULL_NAME
 from core.maintenance import MaintenanceError, ProjectMaintenance
 from core.jobs import JobManager
@@ -32,6 +34,7 @@ class MainWindow(QMainWindow):
 
         self.tabs = QTabWidget()
         self.documents_page = DocumentsPage(project)
+        self.intake_review_page = IntakeReviewPage(project)
         self.ocr_page = OCRPage(project)
         self.claims_page = ClaimsPage(project)
         self.evidence_page = EvidencePage(project)
@@ -46,6 +49,7 @@ class MainWindow(QMainWindow):
             lambda: self.statusBar().showMessage("AI settings saved", 3000)
         )
         self.tabs.addTab(self.documents_page, "Documents")
+        self.tabs.addTab(self.intake_review_page, "Automation Review")
         self.tabs.addTab(self.ocr_page, "OCR & Text")
         self.tabs.addTab(self.claims_page, "Claims")
         self.tabs.addTab(self.evidence_page, "Evidence")
@@ -57,6 +61,8 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.submission_page, "Submission Builder")
         self.tabs.addTab(self.settings_page, "Settings")
         self.setCentralWidget(self.tabs)
+        self.documents_page.automation_finished.connect(self._refresh_workspace)
+        self.intake_review_page.automation_finished.connect(self._refresh_workspace)
 
         project_menu = self.menuBar().addMenu("Project")
         refresh_action = QAction("Refresh Workspace", self)
@@ -145,6 +151,7 @@ class MainWindow(QMainWindow):
 
     def _refresh_workspace(self) -> None:
         self.documents_page.refresh()
+        self.intake_review_page.refresh()
         self.ocr_page.refresh()
         self.claims_page.refresh()
         self.evidence_page.refresh()
@@ -223,7 +230,7 @@ class MainWindow(QMainWindow):
         if active and QMessageBox.question(self, "Active Work", f"{len(active)} background job(s) are active. Cancel safely and close?") != QMessageBox.Yes:
             event.ignore()
             return
-        for page in (self.ocr_page, self.evidence_page, self.timeline_page, self.nexus_page, self.dbq_page, self.rating_strategy_page, self.optimizer_page, self.submission_page):
+        for page in (self.intake_review_page, self.ocr_page, self.evidence_page, self.timeline_page, self.nexus_page, self.dbq_page, self.rating_strategy_page, self.optimizer_page, self.submission_page):
             worker = getattr(page, "worker", None)
             if worker is not None and hasattr(worker, "cancel"):
                 worker.cancel()

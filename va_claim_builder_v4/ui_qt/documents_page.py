@@ -1,10 +1,12 @@
+
 from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QThread
+from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtWidgets import (
     QFileDialog,
+    QCheckBox,
     QHBoxLayout,
     QLabel,
     QMessageBox,
@@ -18,17 +20,20 @@ from PySide6.QtWidgets import (
 from core.documents import DocumentManager
 from core.jobs import JobManager
 from core.projects import ProjectInfo
+from core.settings import SettingsManager
 from ui_qt.progress_panel import ProgressPanel
 from workers import DocumentImportWorker
 
 
 class DocumentsPage(QWidget):
+    automation_finished = Signal()
     def __init__(self, project: ProjectInfo, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.project = project
         self.manager = DocumentManager(project)
         self.jobs = JobManager(project)
         self.jobs.recover_interrupted()
+        self.settings = SettingsManager()
         self._thread: QThread | None = None
         self._worker: DocumentImportWorker | None = None
 
@@ -36,7 +41,8 @@ class DocumentsPage(QWidget):
         heading.setStyleSheet("font-size: 22px; font-weight: 600;")
         description = QLabel(
             "Imported files are copied into this project's persistent uploads folder. "
-            "Imports run in the background with persistent progress and cancellation support."
+            "By default, import continues through local extraction, evidence and timeline creation, "
+            "claim matching, and review suggestions."
         )
         description.setWordWrap(True)
 
@@ -44,10 +50,13 @@ class DocumentsPage(QWidget):
         self.add_button.clicked.connect(self._add_documents)
         self.remove_button = QPushButton("Remove Selected")
         self.remove_button.clicked.connect(self._remove_selected)
+        self.auto_analyze = QCheckBox("Automatically analyze imported documents")
+        self.auto_analyze.setChecked(bool(self.settings.load_app_settings()["automatic_analysis_after_import"]))
 
         button_row = QHBoxLayout()
         button_row.addWidget(self.add_button)
         button_row.addWidget(self.remove_button)
+        button_row.addWidget(self.auto_analyze)
         button_row.addStretch()
 
         self.progress_panel = ProgressPanel()
@@ -109,7 +118,10 @@ class DocumentsPage(QWidget):
         self.progress_panel.start(f"Preparing to import {len(filenames)} document(s)…")
 
         thread = QThread(self)
-        worker = DocumentImportWorker(self.project, filenames)
+        app_settings = self.settings.load_app_settings()
+        app_settings["automatic_analysis_after_import"] = self.auto_analyze.isChecked()
+        self.settings.save_app_settings(app_settings)
+        worker = DocumentImportWorker(self.project, filenames, auto_analyze=self.auto_analyze.isChecked())
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
         worker.progress.connect(self.progress_panel.update_progress)
@@ -130,13 +142,20 @@ class DocumentsPage(QWidget):
             self.progress_panel.label.setText("Cancelling after the current file…")
             self._worker.cancel()
 
-    def _import_completed(self, imported: int, duplicates: int) -> None:
+    def _import_completed(self, imported: int, duplicates: int, intake_summary: object) -> None:
         message = f"Imported {imported} new document(s)."
         if duplicates:
             message += f" Skipped {duplicates} duplicate(s)."
+        if intake_summary is not None:
+            message += (
+                f"\n\nAutomatic intake created {intake_summary.evidence_created} evidence item(s), "
+                f"{intake_summary.timeline_events_created} timeline event(s), and "
+                f"{intake_summary.claim_suggestions_created} claim suggestion(s). Review is required."
+            )
         self.progress_panel.finish(message)
         self.refresh()
         QMessageBox.information(self, "Import complete", message)
+        self.automation_finished.emit()
 
     def _import_failed(self, message: str) -> None:
         self.progress_panel.finish("Import failed")

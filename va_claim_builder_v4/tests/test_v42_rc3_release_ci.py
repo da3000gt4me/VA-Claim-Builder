@@ -1,3 +1,4 @@
+
 from __future__ import annotations
 
 import json
@@ -26,8 +27,8 @@ def test_release_workflow_uploads_persistent_named_artifacts() -> None:
     text = workflow_text()
     assert text.count("actions/upload-artifact@v4") == 2
     assert "retention-days: 30" in text
-    assert "VA-Claim-Builder-4.2.0-RC2-macOS-arm64" in text
-    assert "VA-Claim-Builder-4.2.0-RC3-Windows-x64" in text
+    assert "VA-Claim-Builder-4.2.0-RC4-macOS-arm64" in text
+    assert "VA-Claim-Builder-4.2.0-RC4-Windows-x64" in text
     assert text.count("if-no-files-found: error") == 2
 
 

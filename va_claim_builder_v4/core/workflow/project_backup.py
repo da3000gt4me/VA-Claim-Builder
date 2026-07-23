@@ -1,3 +1,4 @@
+
 from __future__ import annotations
 import hashlib, json, shutil, zipfile
 from datetime import datetime, timezone
@@ -15,7 +16,7 @@ class ProjectBackupService:
             if not path.is_file() or out in path.parents:
                 continue
             digest = hashlib.sha256(path.read_bytes()).hexdigest()
-            files.append({"path": str(path.relative_to(root)), "size": path.stat().st_size, "sha256": digest})
+            files.append({"path": path.relative_to(root).as_posix(), "size": path.stat().st_size, "sha256": digest})
         manifest = {"created_at": datetime.now(timezone.utc).isoformat(), "project_root_name": root.name, "files": files}
         manifest_path = root / "backup_manifest.json"
         manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")

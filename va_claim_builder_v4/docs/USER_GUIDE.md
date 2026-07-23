@@ -1,3 +1,4 @@
+
 # User Guide — Version 4.2.0 RC1
 
 ## Projects and documents
@@ -27,3 +28,16 @@ Use the Project menu to create a checksum-validated backup, restore it into a ne
 ## Everyday safety
 
 Keep an independent backup before large imports or maintenance. Review every generated draft, confirm source citations, obtain required signatures and professional findings, and retain originals. Do not rely on scores, analyses, or package organization as advice or an outcome prediction.
+## RC4 automated intake and approval
+
+RC4 treats import as the beginning of a persistent background workflow:
+validation, fingerprinting, text/OCR extraction, classification, local medical
+fact extraction, draft evidence, claim matching, timeline construction,
+relationship indicators, and contradiction/gap review.
+
+Drafts are separate from confirmed content. Existing user-written claim fields
+are never overwritten. A claim suggestion becomes a claim only after acceptance.
+Relationship language is presented as a possibility and states when a qualified
+provider opinion may still be needed. **Automation Review** centralizes the
+queue, failures, suggestions, evidence/timeline review items, and bulk decisions.
+Reanalysis deduplicates unchanged output and preserves prior decisions.
