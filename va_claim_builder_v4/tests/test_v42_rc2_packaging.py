@@ -15,9 +15,9 @@ from scripts import build_release
 from scripts.smoke_macos_bundle import bundle_executable
 
 
-def test_rc4_version_uses_bundled_authoritative_resource() -> None:
-    assert BUILD_VERSION.startswith("4.2.0rc4")
-    assert DISPLAY_VERSION == "4.2.0 RC4"
+def test_rc6_version_uses_bundled_authoritative_resource() -> None:
+    assert BUILD_VERSION.startswith("4.2.0rc6")
+    assert DISPLAY_VERSION == "4.2.0 RC6"
 
 
 def test_resource_resolution_for_source_and_frozen(monkeypatch, tmp_path: Path) -> None:

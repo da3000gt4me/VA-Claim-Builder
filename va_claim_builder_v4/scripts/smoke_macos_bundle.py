@@ -45,6 +45,7 @@ def main() -> int:
     parser.add_argument("app", type=Path)
     parser.add_argument("--timeout", type=int, default=60)
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--extraction-output", type=Path)
     args = parser.parse_args()
     executable = bundle_executable(args.app.resolve())
     with tempfile.TemporaryDirectory(prefix="vcb-rc2-smoke-") as temporary:
@@ -52,7 +53,17 @@ def main() -> int:
         runtime = run_mode(executable, root / "Runtime Application Data", root / "runtime.json", "VCB_PACKAGED_RUNTIME_DIAGNOSTIC", args.timeout)
         ui = run_mode(executable, root / "UI Application Data", root / "ui.json", "VCB_PACKAGED_UI_SMOKE_MARKER", args.timeout)
         workflow = run_mode(executable, root / "Workflow Application Data", root / "workflow.json", "VCB_PACKAGED_SMOKE_OUTPUT", args.timeout)
-        result = {"bundle": str(args.app.resolve()), "runtime": runtime, "ui": ui, "workflow": workflow}
+        extraction_marker = args.extraction_output or (args.app.parent / "extraction-smoke-result.json")
+        extraction = run_mode(
+            executable, root / "Extraction Application Data", extraction_marker,
+            "VCB_PACKAGED_EXTRACTION_SMOKE_OUTPUT", max(args.timeout, 180),
+        )
+        if not all(extraction.values()):
+            raise RuntimeError(f"Packaged extraction smoke failed: {extraction}")
+        result = {
+            "bundle": str(args.app.resolve()), "runtime": runtime, "ui": ui,
+            "workflow": workflow, "extraction": extraction,
+        }
         output = args.output or args.app.parent / "packaged-smoke-result.json"
         output.write_text(json.dumps(result, indent=2), encoding="utf-8")
         manifest_path = output.parent / "release-manifest.json"
@@ -61,8 +72,19 @@ def main() -> int:
             digest = hashlib.sha256(output.read_bytes()).hexdigest()
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             manifest["packaged_smoke_test"] = {"passed": True, "result_file": output.name}
+            manifest["packaged_extraction_smoke_test"] = {
+                "passed": True, "result_file": extraction_marker.name,
+            }
             manifest["artifacts"] = [item for item in manifest["artifacts"] if item["name"] != output.name]
             manifest["artifacts"].append({"name": output.name, "size": output.stat().st_size, "sha256": digest})
+            extraction_digest = hashlib.sha256(extraction_marker.read_bytes()).hexdigest()
+            manifest["artifacts"] = [
+                item for item in manifest["artifacts"] if item["name"] != extraction_marker.name
+            ]
+            manifest["artifacts"].append({
+                "name": extraction_marker.name, "size": extraction_marker.stat().st_size,
+                "sha256": extraction_digest,
+            })
             manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
             sums_path.write_text("".join(f"{item['sha256']}  {item['name']}\n" for item in manifest["artifacts"]), encoding="utf-8")
         print(json.dumps(result, indent=2))
@@ -71,4 +93,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

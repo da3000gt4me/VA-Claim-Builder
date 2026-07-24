@@ -16,6 +16,7 @@ from core.evidence import (
 from core.projects import AppPaths, ProjectInfo
 from core.settings import SettingsManager
 from workers import EvidenceAnalysisWorker
+from .checked_table import CheckableHeader
 
 
 class EvidencePage(QWidget):
@@ -37,6 +38,7 @@ class EvidencePage(QWidget):
         self._saved_snapshot: tuple[object, ...] | None = None
         self._analysis_thread: QThread | None = None
         self._analysis_worker: EvidenceAnalysisWorker | None = None
+        self._checked_ids: set[str] = set()
 
         heading = QLabel("Evidence Review Workspace")
         heading.setStyleSheet("font-size: 22px; font-weight: 600;")
@@ -68,12 +70,17 @@ class EvidencePage(QWidget):
         filters.addWidget(self.unlinked_filter); filters.addWidget(refresh_button)
 
         self.table = QTableWidget(0, 7)
+        self.check_header = CheckableHeader(self.table)
+        self.table.setHorizontalHeader(self.check_header)
         self.table.setHorizontalHeaderLabels(["Title", "Review", "Type", "Date", "Provider / Source", "Claims", "OCR"])
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QTableWidget.SelectionMode.ExtendedSelection)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.itemSelectionChanged.connect(self._load_selected)
+        self.table.itemChanged.connect(self._evidence_check_changed)
+        self.check_header.toggled.connect(self._check_visible)
         self.table.horizontalHeader().setStretchLastSection(True)
+        self.checked_count = QLabel("0 checked")
         self.empty_message = QLabel("No evidence has been added to this project yet.")
         self.empty_message.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.empty_message.setStyleSheet("color: #666; padding: 18px;")
@@ -149,7 +156,7 @@ class EvidencePage(QWidget):
         self.editor_tabs.addTab(claim_tab, "Claim Associations")
         self.editor_tabs.addTab(source_tab, "OCR & Source"); self.editor_tabs.addTab(analysis_tab, "AI Analysis")
         left = QWidget(); left_layout = QVBoxLayout(left); left_layout.setContentsMargins(0, 0, 0, 0)
-        left_layout.addWidget(self.table, 1); left_layout.addWidget(self.empty_message)
+        left_layout.addWidget(self.checked_count); left_layout.addWidget(self.table, 1); left_layout.addWidget(self.empty_message)
         splitter = QSplitter(); splitter.addWidget(left); splitter.addWidget(self.editor_tabs)
         splitter.setStretchFactor(0, 3); splitter.setStretchFactor(1, 2)
 
@@ -207,7 +214,7 @@ class EvidencePage(QWidget):
         if self._loading: return
         selected_id = self.current_id
         try:
-            checked_evidence = set(self._checked_evidence_ids()) if self.table.rowCount() else set()
+            self._remember_visible_checks()
             self._reload_options()
             records = self.manager.list(
                 review_status=str(self.status_filter.currentData() or "") or None,
@@ -225,9 +232,10 @@ class EvidencePage(QWidget):
                     item = QTableWidgetItem(value); item.setData(Qt.ItemDataRole.UserRole, record.evidence_id)
                     if column == 0:
                         item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-                        item.setCheckState(Qt.CheckState.Checked if record.evidence_id in checked_evidence else Qt.CheckState.Unchecked)
+                        item.setCheckState(Qt.CheckState.Checked if record.evidence_id in self._checked_ids else Qt.CheckState.Unchecked)
                     self.table.setItem(row, column, item)
             self.table.blockSignals(False); self.table.resizeColumnsToContents()
+            self._update_check_state()
             self.empty_message.setVisible(not records)
             filtered = bool(self.search_box.text() or self.status_filter.currentData() or self.type_filter.currentData()
                             or self.claim_filter.currentData() or self.unlinked_filter.isChecked() or self.ocr_filter.currentData())
@@ -359,17 +367,67 @@ class EvidencePage(QWidget):
         return QMessageBox.question(self, "Discard unsaved edits?", "Discard the unsaved evidence review edits?") == QMessageBox.StandardButton.Yes
 
     def delete(self) -> None:
-        if not self.current_id:
-            QMessageBox.information(self, "Delete evidence", "Select an evidence record first."); return
-        if QMessageBox.question(self, "Delete evidence", "Delete this evidence record and remove all of its claim links? The source document is preserved.") != QMessageBox.StandardButton.Yes:
+        ids = self._checked_evidence_ids()
+        if not ids:
+            QMessageBox.information(self, "Delete evidence", "Check one or more evidence records first."); return
+        preview = "\n".join(f"• {self.manager.get(item).title}" for item in ids[:5])
+        extra = f"\n…and {len(ids) - 5} more" if len(ids) > 5 else ""
+        if QMessageBox.question(
+            self, "Delete checked evidence",
+            f"Delete {len(ids)} checked evidence record(s) and their links?\n\n{preview}{extra}\n\n"
+            "Source documents and claims are preserved."
+        ) != QMessageBox.StandardButton.Yes:
             return
         try:
-            self.manager.delete(self.current_id); self._saved_snapshot = None; self.clear_editor(); self.refresh()
+            self.manager.delete_many(ids)
+            self._checked_ids.difference_update(ids)
+            if self.current_id in ids:
+                self.current_id = None; self._saved_snapshot = None
+            self.refresh()
         except Exception as exc: QMessageBox.critical(self, "Unable to delete evidence", str(exc))
 
     def _checked_evidence_ids(self) -> list[str]:
-        return [str(self.table.item(row, 0).data(Qt.ItemDataRole.UserRole)) for row in range(self.table.rowCount())
-                if self.table.item(row, 0) and self.table.item(row, 0).checkState() == Qt.CheckState.Checked]
+        self._remember_visible_checks()
+        return sorted(self._checked_ids)
+
+    def _remember_visible_checks(self) -> None:
+        for row in range(self.table.rowCount()):
+            item = self.table.item(row, 0)
+            if not item: continue
+            identifier = str(item.data(Qt.ItemDataRole.UserRole))
+            if item.checkState() == Qt.CheckState.Checked: self._checked_ids.add(identifier)
+            else: self._checked_ids.discard(identifier)
+
+    def _evidence_check_changed(self, item: QTableWidgetItem) -> None:
+        if item.column() != 0: return
+        identifier = str(item.data(Qt.ItemDataRole.UserRole))
+        if item.checkState() == Qt.CheckState.Checked: self._checked_ids.add(identifier)
+        else: self._checked_ids.discard(identifier)
+        self._update_check_state()
+
+    def _check_visible(self, state) -> None:
+        self.table.blockSignals(True)
+        for row in range(self.table.rowCount()):
+            item = self.table.item(row, 0)
+            if not item: continue
+            item.setCheckState(state)
+            identifier = str(item.data(Qt.ItemDataRole.UserRole))
+            if state == Qt.CheckState.Checked: self._checked_ids.add(identifier)
+            else: self._checked_ids.discard(identifier)
+        self.table.blockSignals(False)
+        self._update_check_state()
+
+    def _update_check_state(self) -> None:
+        visible = [
+            self.table.item(row, 0) for row in range(self.table.rowCount())
+            if self.table.item(row, 0)
+        ]
+        checked = sum(item.checkState() == Qt.CheckState.Checked for item in visible)
+        state = Qt.CheckState.Unchecked if checked == 0 else (
+            Qt.CheckState.Checked if checked == len(visible) else Qt.CheckState.PartiallyChecked
+        )
+        self.check_header.setCheckState(state)
+        self.checked_count.setText(f"{len(self._checked_ids)} checked")
 
     def _analyze_selected(self) -> None:
         rows = self.table.selectionModel().selectedRows()

@@ -5,7 +5,7 @@ import re
 from dataclasses import dataclass, field, fields
 from datetime import datetime
 
-EXTRACTION_VERSION = "4.2.0-rc4-local-1"
+EXTRACTION_VERSION = "4.2.0-rc6-local-1"
 
 
 def _unique(values):
@@ -34,9 +34,19 @@ class LocalExtraction:
     contradictory_statements: list[str] = field(default_factory=list)
     relationship_statements: list[str] = field(default_factory=list)
     page_excerpts: list[dict] = field(default_factory=list)
+    document_type: str = "other"
+    document_type_confidence: float = 0.0
+    form_revision: str = ""
+    claim_suggestions: list[dict] = field(default_factory=list)
+    diagnosis_details: list[dict] = field(default_factory=list)
+    timeline_entries: list[dict] = field(default_factory=list)
+    imported_statement: dict = field(default_factory=dict)
 
     def count(self) -> int:
-        return sum(len(value) for value in vars(self).values())
+        return sum(
+            len(value) for descriptor in fields(self)
+            if hasattr((value := getattr(self, descriptor.name)), "__len__")
+        )
 
 
 class LocalMedicalExtractor:
@@ -53,7 +63,11 @@ class LocalMedicalExtractor:
     IMAGE_TERMS = r"(?:MRI|CT scan|X[- ]?ray|ultrasound|radiograph|imaging)"
     PROCEDURE_TERMS = r"(?:surgery|injection|physical therapy|procedure|arthroscopy|fusion|biopsy)"
 
-    def extract(self, text: str) -> LocalExtraction:
+    def extract(self, text: str, *, filename: str = "", acroform_fields: dict | None = None) -> LocalExtraction:
+        from .structured import (
+            classify_document, extract_diagnoses, extract_provider, parse_20_0995,
+            parse_statement, personal_timeline_events,
+        )
         result = LocalExtraction()
         pages = self._pages(text)
         for page, page_text in pages:
@@ -95,13 +109,38 @@ class LocalMedicalExtractor:
         for descriptor in fields(result):
             name = descriptor.name
             values = getattr(result, name)
-            if name != "page_excerpts":
+            if name != "page_excerpts" and isinstance(values, list) and (
+                not values or isinstance(values[0], str)
+            ):
                 setattr(result, name, _unique(values))
         seen = set()
         result.page_excerpts = [
             item for item in result.page_excerpts
             if not ((item["page"], item["text"].casefold()) in seen or seen.add((item["page"], item["text"].casefold())))
         ]
+        classification = classify_document(text, filename=filename, fields=acroform_fields)
+        result.document_type = classification.document_type
+        result.document_type_confidence = classification.confidence
+        result.form_revision = classification.revision
+        provider = extract_provider(text)
+        for key, target in (("provider", result.providers), ("facility", result.facilities), ("specialty", result.specialties)):
+            if provider.get(key):
+                target[:] = _unique([*target, provider[key]])
+        result.diagnosis_details = extract_diagnoses(
+            pages, provider=provider["provider"], facility=provider["facility"], specialty=provider["specialty"]
+        )
+        result.diagnoses = _unique([
+            *result.diagnoses,
+            *(item["diagnosis"] for item in result.diagnosis_details if item["status"] == "confirmed"),
+        ])
+        if classification.document_type == "va_form_20_0995":
+            result.claim_suggestions = parse_20_0995(pages, fields=acroform_fields)
+        if classification.document_type == "personal_timeline":
+            result.timeline_entries = personal_timeline_events(pages)
+        if classification.document_type in {
+            "claimant_nexus_statement", "provider_nexus_letter", "buddy_witness_statement"
+        }:
+            result.imported_statement = parse_statement(classification, text)
         return result
 
     @staticmethod

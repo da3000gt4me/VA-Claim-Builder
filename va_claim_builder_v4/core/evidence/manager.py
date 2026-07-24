@@ -122,6 +122,24 @@ class EvidenceManager:
             if connection.execute("DELETE FROM evidence WHERE evidence_id = ?", (evidence_id,)).rowcount == 0:
                 raise KeyError(evidence_id)
 
+    def delete_many(self, evidence_ids: Iterable[str]) -> int:
+        """Delete evidence and cascading relationships in one transaction; documents are preserved."""
+        ids = list(dict.fromkeys(str(item) for item in evidence_ids))
+        if not ids:
+            return 0
+        placeholders = ",".join("?" for _ in ids)
+        with self._connect() as connection:
+            existing = connection.execute(
+                f"SELECT evidence_id FROM evidence WHERE evidence_id IN ({placeholders})", ids
+            ).fetchall()
+            if len(existing) != len(ids):
+                missing = set(ids) - {str(row[0]) for row in existing}
+                raise KeyError(", ".join(sorted(missing)))
+            cursor = connection.execute(
+                f"DELETE FROM evidence WHERE evidence_id IN ({placeholders})", ids
+            )
+        return cursor.rowcount
+
     def list(self, *, evidence_type: str | None = None, claim_id: str | None = None,
              review_status: str | None = None, unlinked: bool = False,
              ocr_availability: str | None = None, search: str = "") -> list[Evidence]:

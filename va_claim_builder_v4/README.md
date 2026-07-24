@@ -1,5 +1,10 @@
 
-# VA Claim Builder Version 4.2.0 RC4
+# VA Claim Builder Version 4.2.0 RC6
+
+RC6 corrects installed-app OCR and structured extraction defects. Text is
+evaluated page by page, scans use local OCR, and raw/normalized/corrected text
+is reviewable. Form 20-0995, diagnosis, timeline, nexus, and buddy results are
+pending review data. See [OCR Guide](docs/OCR_GUIDE.md).
 
 RC4 adds local-first automated intake. With **Automatically analyze imported
 documents** enabled (the default), files proceed from fingerprinting and text

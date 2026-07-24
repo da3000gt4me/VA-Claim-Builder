@@ -27,7 +27,7 @@ def project(tmp_path: Path):
 def test_authoritative_release_version() -> None:
     assert DISPLAY_VERSION.startswith("4.2.0 RC")
     assert BUILD_VERSION.startswith("4.2.0rc")
-    assert SCHEMA_VERSION == 10
+    assert SCHEMA_VERSION == 11
 
 
 def test_backup_manifest_checksums_and_restore(tmp_path: Path) -> None:

@@ -28,6 +28,7 @@ class IntakeSummary:
     claim_suggestions_created: int = 0
     timeline_events_created: int = 0
     relationship_suggestions_created: int = 0
+    statements_imported: int = 0
     warnings: list[str] = field(default_factory=list)
     failures: list[str] = field(default_factory=list)
 
@@ -108,7 +109,19 @@ class AutomatedIntakeOrchestrator:
             if not text.strip() or len(re.sub(r"--- PAGE \d+ ---", "", text).strip()) < 5:
                 raise ValueError("No text detected. OCR may be required or unavailable.")
             self._stage(document_id, "classifying", 25, emit, document.original_name)
-            extraction = self.extractor.extract(text)
+            try:
+                metadata = __import__("json").loads(ocr.metadata_path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                metadata = {}
+            extraction = self.extractor.extract(
+                text, filename=document.original_name,
+                acroform_fields=metadata.get("acroform_fields") or {},
+            )
+            self.intake.set_classification(
+                document_id, extraction.document_type, extraction.document_type_confidence,
+                extraction.form_revision,
+                "acroform+local-rules" if metadata.get("acroform_fields") else "local-rules",
+            )
             if is_cancelled(): raise InterruptedError("Cancelled")
             self._stage(document_id, "extracting evidence", 40, emit, document.original_name)
             claim_matches = self._match_claims(extraction)
@@ -116,18 +129,31 @@ class AutomatedIntakeOrchestrator:
             summary.evidence_created = len(set(evidence_ids))
             self._stage(document_id, "matching claims", 60, emit, document.original_name)
             summary.claims_matched = len({claim_id for ids in claim_matches.values() for claim_id in ids})
-            self._create_claim_drafts(extraction, claim_matches, evidence_ids)
+            self._create_claim_drafts(document_id, extraction, claim_matches, evidence_ids)
             self._stage(document_id, "building timeline", 75, emit, document.original_name)
             summary.timeline_events_created = self._create_timeline(document_id, extraction, claim_matches, evidence_ids) if self.app_settings["create_timeline_suggestions"] else 0
             self._stage(document_id, "generating suggestions", 88, emit, document.original_name)
             counts = self._create_suggestions(document_id, extraction, claim_matches, evidence_ids)
             summary.claim_suggestions_created, summary.relationship_suggestions_created = counts
+            if extraction.imported_statement:
+                statement_claim = self._statement_claim(extraction)
+                self.intake.import_statement(
+                    document_id, extraction.document_type, extraction.imported_statement,
+                    extraction.document_type_confidence,
+                    statement_claim,
+                )
+                if extraction.document_type in {"provider_nexus_letter", "claimant_nexus_statement"} and statement_claim:
+                    self._import_nexus(document_id, extraction, statement_claim)
+                summary.statements_imported = 1
             self.intake.add_suggestion(
                 "metadata", document_id, f"Extracted metadata for {document.original_name}",
                 {
                     "providers": extraction.providers, "facilities": extraction.facilities,
                     "specialties": extraction.specialties, "dates": extraction.dates,
                     "diagnoses": extraction.diagnoses, "symptoms": extraction.symptoms,
+                    "diagnosis_details": extraction.diagnosis_details,
+                    "document_type": extraction.document_type,
+                    "form_revision": extraction.form_revision,
                     "medications": extraction.medications, "procedures": extraction.procedures,
                     "imaging": extraction.imaging, "laboratory_testing": extraction.laboratory_testing,
                 }, .8, EXTRACTION_VERSION,
@@ -224,6 +250,24 @@ class AutomatedIntakeOrchestrator:
 
     def _create_timeline(self, document_id, extraction, matches, evidence_ids):
         count = 0
+        for item in extraction.timeline_entries:
+            fingerprint = self.intake.fingerprint(document_id, "personal-timeline", item)
+            with sqlite3.connect(self.project.database_path) as connection:
+                if connection.execute("SELECT 1 FROM intake_timeline_sources WHERE fingerprint=?", (fingerprint,)).fetchone():
+                    continue
+            event = self.timeline.create(
+                item["title"], event_date=item.get("event_date", ""), date_precision="exact",
+                event_type=item.get("event_type", "other"), description=item.get("description", ""),
+                document_id=document_id, evidence_id=evidence_ids[0] if evidence_ids else None,
+                notes="Claimant-reported automated draft; not independently medically verified.",
+                claim_ids={cid for ids in matches.values() for cid in ids},
+            )
+            with sqlite3.connect(self.project.database_path) as connection:
+                connection.execute(
+                    "INSERT INTO intake_timeline_sources VALUES(?,?,?,?)",
+                    (event.event_id, document_id, fingerprint, EXTRACTION_VERSION),
+                )
+            count += 1
         dates = extraction.dates or [""]
         for index, date in enumerate(dates[:50]):
             excerpt = next((item for item in extraction.page_excerpts if date and date in item["text"]), None)
@@ -251,6 +295,23 @@ class AutomatedIntakeOrchestrator:
 
     def _create_suggestions(self, document_id, extraction, matches, evidence_ids):
         claim_count = relation_count = 0
+        for item in extraction.claim_suggestions if self.app_settings["create_claim_suggestions"] else []:
+            payload = {
+                "proposed_condition_name": item["condition"],
+                "condition": item["condition"], "secondary_to": item.get("secondary_to", ""),
+                "description": item.get("description", ""), "service_event": item.get("service_event", ""),
+                "theory": item.get("theory", ""), "prior_decision_date": item.get("prior_decision_date", ""),
+                "source_page": item.get("source_page"), "extraction_method": item.get("extraction_method"),
+                "field_references": item.get("field_references", {}),
+                "supporting_text": item.get("supporting_text", ""),
+                "possible_claim_type": "secondary" if item.get("secondary_to") else "direct",
+                "linked_source_documents": [document_id], "linked_evidence_records": evidence_ids,
+            }
+            self.intake.add_suggestion(
+                "claim", document_id, item["condition"], payload,
+                float(item.get("confidence", .75)), EXTRACTION_VERSION,
+            )
+            claim_count += 1
         for diagnosis in extraction.diagnoses if self.app_settings["create_claim_suggestions"] else []:
             if matches.get(diagnosis):
                 continue
@@ -283,10 +344,71 @@ class AutomatedIntakeOrchestrator:
             self.intake.add_suggestion("gap", document_id, "No diagnosis label detected", {"recommended_action": "Review the document and confirm whether diagnosis evidence is present."}, .9, EXTRACTION_VERSION)
         return claim_count, relation_count
 
-    def _create_claim_drafts(self, extraction, matches, evidence_ids):
+    def _statement_claim(self, extraction):
+        condition = str(extraction.imported_statement.get("condition") or extraction.imported_statement.get("secondary_condition") or "")
+        tokens = self._tokens(condition)
+        if not tokens:
+            return None
+        return next(
+            (claim.claim_id for claim in self.claims.list_claims() if tokens & self._tokens(claim.condition_name)),
+            None,
+        )
+
+    def _import_nexus(self, document_id, extraction, claim_id):
+        from core.nexus import NexusLetterManager
+        manager = NexusLetterManager(self.project)
+        if any(document_id in letter.document_ids for letter in manager.list()):
+            return
+        fields = extraction.imported_statement
+        provider_authored = extraction.document_type == "provider_nexus_letter"
+        manager.create(
+            claim_id,
+            f"Imported {'provider nexus letter' if provider_authored else 'claimant nexus argument'}",
+            letter_type="imported_provider_opinion" if provider_authored else "claimant_argument",
+            status="final" if provider_authored and fields.get("signed") else "draft",
+            primary_theory="secondary" if fields.get("secondary_condition") else "direct",
+            author_name=str(fields.get("author") or ""),
+            author_credentials=str(fields.get("credentials") or ""),
+            specialty=str(fields.get("specialty") or ""),
+            content={
+                "current_diagnosis": fields.get("condition", ""),
+                "in_service_event": fields.get("event_or_exposure", ""),
+                "nexus_opinion": fields.get("opinion_language", ""),
+                "medical_rationale": fields.get("rationale", ""),
+                "service_history": fields.get("continuity", ""),
+                "limitations": (
+                    "Imported claimant-authored argument; not an independent medical opinion."
+                    if not provider_authored else "Imported from source; verify author, credentials, and signature."
+                ),
+                "signature_block": fields.get("signature", ""),
+            },
+            document_ids=(document_id,),
+        )
+
+    def _create_claim_drafts(self, document_id, extraction, matches, evidence_ids):
         for diagnosis, claim_ids in matches.items():
             for claim_id in claim_ids:
-                self.intake.add_claim_draft(claim_id, "current_diagnosis", diagnosis, evidence_ids, EXTRACTION_VERSION)
+                details = [
+                    item for item in extraction.diagnosis_details
+                    if item["diagnosis"].casefold() == diagnosis.casefold()
+                ]
+                detail_text = diagnosis
+                codes = [item["code"] for item in details if item.get("code")]
+                providers = [item["provider"] for item in details if item.get("provider")]
+                dates = [item["date"] for item in details if item.get("date")]
+                if codes: detail_text += f" ({', '.join(dict.fromkeys(codes))})"
+                if dates: detail_text += f"; documented {', '.join(dict.fromkeys(dates))}"
+                if providers: detail_text += f"; provider(s): {', '.join(dict.fromkeys(providers))}"
+                self.intake.add_claim_draft(claim_id, "current_diagnosis", detail_text, evidence_ids, EXTRACTION_VERSION)
+                self.intake.add_suggestion(
+                    "claim_field", document_id, f"Current diagnosis: {diagnosis}",
+                    {
+                        "field_name": "current_diagnosis", "proposed_value": detail_text,
+                        "diagnosis_details": details, "source_document": document_id,
+                        "source_evidence": evidence_ids,
+                    },
+                    .86, EXTRACTION_VERSION, claim_id,
+                )
                 if extraction.symptoms:
                     self.intake.add_claim_draft(claim_id, "symptoms", "; ".join(extraction.symptoms), evidence_ids, EXTRACTION_VERSION)
                 summary = f"Records document {diagnosis}."
