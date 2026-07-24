@@ -1,6 +1,15 @@
 
 # Troubleshooting
 
+## Scanned page has no text
+
+Inspect the page failure reason. Install Tesseract if missing. For rotated/faint
+pages choose 90/180/270 degrees and retry. Failed pages remain reviewable.
+
+## Highlighted row was not deleted
+
+Bulk actions intentionally use checked rows, not row highlighting.
+
 - If a project will not open, preserve it and run project validation on a copy or restore a verified backup.
 - For missing files, reconnect the drive or restore the original source; repair never deletes evidence records.
 - If a job was interrupted, reopen the project; active states are converted to interrupted/failed states with retry context.

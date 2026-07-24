@@ -17,6 +17,7 @@ from ui_qt.dbq_page import DBQPage
 from ui_qt.rating_strategy_page import RatingStrategyPage
 from ui_qt.optimizer_page import OptimizerPage
 from ui_qt.submission_page import SubmissionPage
+from ui_qt.statements_page import StatementsPage
 from ui_qt.intake_review_page import IntakeReviewPage
 from core.version import FULL_NAME
 from core.maintenance import MaintenanceError, ProjectMaintenance
@@ -44,6 +45,7 @@ class MainWindow(QMainWindow):
         self.rating_strategy_page = RatingStrategyPage(project)
         self.optimizer_page = OptimizerPage(project)
         self.submission_page = SubmissionPage(project)
+        self.statements_page = StatementsPage(project)
         self.settings_page = SettingsPage()
         self.settings_page.settings_saved.connect(
             lambda: self.statusBar().showMessage("AI settings saved", 3000)
@@ -55,6 +57,7 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.evidence_page, "Evidence")
         self.tabs.addTab(self.timeline_page, "Medical Timeline")
         self.tabs.addTab(self.nexus_page, "Nexus Letters")
+        self.tabs.addTab(self.statements_page, "Buddy / Witness")
         self.tabs.addTab(self.dbq_page, "DBQ Assistant")
         self.tabs.addTab(self.rating_strategy_page, "Rating Strategy")
         self.tabs.addTab(self.optimizer_page, "Claim Optimizer")
@@ -105,6 +108,9 @@ class MainWindow(QMainWindow):
         nexus_action = QAction("Open Nexus Letters", self)
         nexus_action.triggered.connect(lambda: self.tabs.setCurrentWidget(self.nexus_page))
         nexus_menu.addAction(nexus_action)
+        statements_action = QAction("Open Buddy / Witness Statements", self)
+        statements_action.triggered.connect(lambda: self.tabs.setCurrentWidget(self.statements_page))
+        nexus_menu.addAction(statements_action)
         dbq_menu = self.menuBar().addMenu("DBQ Assistant")
         dbq_action = QAction("Open DBQ Assistant", self)
         dbq_action.triggered.connect(lambda: self.tabs.setCurrentWidget(self.dbq_page))
@@ -157,6 +163,7 @@ class MainWindow(QMainWindow):
         self.evidence_page.refresh()
         self.timeline_page.refresh()
         self.nexus_page.refresh()
+        self.statements_page.refresh()
         self.dbq_page.refresh()
         self.rating_strategy_page.refresh()
         self.optimizer_page.refresh()

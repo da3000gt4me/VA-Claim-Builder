@@ -92,9 +92,19 @@ def main() -> int:
         except Exception:
             logging.exception("packaged_smoke_failed")
             return 2
+    extraction_smoke_output = os.environ.get("VCB_PACKAGED_EXTRACTION_SMOKE_OUTPUT")
+    if extraction_smoke_output:
+        from core.release_smoke import run_packaged_extraction_workflow
+        try:
+            result = run_packaged_extraction_workflow(manager, extraction_smoke_output)
+            logging.info("packaged_extraction_smoke_complete checks=%s", len(result))
+            return 0 if all(result.values()) else 2
+        except Exception:
+            logging.exception("packaged_extraction_smoke_failed")
+            return 2
     ui_smoke_marker = os.environ.get("VCB_PACKAGED_UI_SMOKE_MARKER")
     if ui_smoke_marker:
-        project = manager.create_project("RC4 UI Smoke")
+        project = manager.create_project("RC6 UI Smoke")
         window = MainWindow(project)
         window.show()
 
@@ -133,4 +143,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

@@ -33,7 +33,7 @@ def test_evidence_workspace_is_integrated_into_main_window(tmp_path: Path, monke
     window = MainWindow(project)
 
     labels = [window.tabs.tabText(index) for index in range(window.tabs.count())]
-    assert labels == ["Documents", "Automation Review", "OCR & Text", "Claims", "Evidence", "Medical Timeline", "Nexus Letters", "DBQ Assistant", "Rating Strategy", "Claim Optimizer", "Submission Builder", "Settings"]
+    assert labels == ["Documents", "Automation Review", "OCR & Text", "Claims", "Evidence", "Medical Timeline", "Nexus Letters", "Buddy / Witness", "DBQ Assistant", "Rating Strategy", "Claim Optimizer", "Submission Builder", "Settings"]
     assert window.evidence_page.table.rowCount() == 0
     assert window.evidence_page.empty_message.text() == "No evidence has been added to this project yet."
     window.close()

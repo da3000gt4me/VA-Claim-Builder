@@ -1,6 +1,14 @@
 
 # Quick Start
 
+## RC6 document processing
+
+Import documents, open **OCR & Text Extraction**, check documents, and choose
+**Process Checked**. Correct flagged pages as needed. Use **Automation Review
+Center** to accept or reject extracted fields. Imported provider letters appear
+in **Nexus Letters** when a claim matches; lay statements appear in
+**Buddy / Witness**.
+
 ## RC4 automatic intake
 
 Import documents with **Automatically analyze imported documents** selected for

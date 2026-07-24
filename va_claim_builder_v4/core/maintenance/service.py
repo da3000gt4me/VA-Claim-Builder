@@ -3,7 +3,7 @@ import hashlib,json,os,platform,shutil,sqlite3,sys,tempfile,uuid,zipfile
 from datetime import datetime,timezone
 from pathlib import Path,PurePosixPath
 from core.projects import ProjectInfo,ProjectManager
-from core.projects.manager import PROJECT_FOLDERS
+from core.projects.manager import PROJECT_FOLDERS,SCHEMA_VERSION
 from core.version import BUILD_VERSION
 def _now():return datetime.now(timezone.utc).isoformat()
 class MaintenanceError(RuntimeError):pass
@@ -73,7 +73,7 @@ class ProjectMaintenance:
     if integrity!="ok":issues.append({"level":"blocking","code":"database_integrity","message":integrity})
     for row in c.execute("PRAGMA foreign_key_check"):issues.append({"level":"warning","code":"foreign_key","message":f"Orphaned relationship in table {row[0]}"})
     version=c.execute("SELECT value FROM schema_metadata WHERE key='schema_version'").fetchone()
-    if not version or not str(version[0]).isdigit() or int(version[0])>10:issues.append({"level":"blocking","code":"schema_version","message":"Database schema version is invalid or unsupported."})
+    if not version or not str(version[0]).isdigit() or int(version[0])>SCHEMA_VERSION:issues.append({"level":"blocking","code":"schema_version","message":"Database schema version is invalid or unsupported."})
     if self._table(c,"documents"):
      for did,name,stored in c.execute("SELECT document_id,original_name,stored_name FROM documents"):
       if Path(stored).is_absolute() or ".." in Path(stored).parts:issues.append({"level":"blocking","code":"invalid_path","message":f"Unsafe stored path for {name}"})
@@ -101,7 +101,7 @@ class ProjectMaintenance:
   try:
    with sqlite3.connect(self.project.database_path) as c:c.row_factory=sqlite3.Row;failed=[{"job_type":r[0],"status":r[1],"message":r[2][:200]} for r in c.execute("SELECT job_type,status,message FROM jobs WHERE status IN ('failed','interrupted') ORDER BY updated_at DESC LIMIT 50")]
   except sqlite3.Error:pass
-  data={"application_version":BUILD_VERSION,"operating_system":platform.platform(),"python_version":sys.version,"dependencies":{n:self._dep(n) for n in ("PySide6","pypdf","python-docx","cryptography")},"schema_version":10,"project_id":self.project.project_id,"validation_summary":validation,"failed_jobs":failed,"privacy":"No source evidence, OCR text, statements, credentials, or provider payloads are included."};p=Path(path);p.write_text(json.dumps(data,indent=2),encoding="utf-8");return p
+  data={"application_version":BUILD_VERSION,"operating_system":platform.platform(),"python_version":sys.version,"dependencies":{n:self._dep(n) for n in ("PySide6","pypdf","python-docx","cryptography")},"schema_version":SCHEMA_VERSION,"project_id":self.project.project_id,"validation_summary":validation,"failed_jobs":failed,"privacy":"No source evidence, OCR text, statements, credentials, or provider payloads are included."};p=Path(path);p.write_text(json.dumps(data,indent=2),encoding="utf-8");return p
  def cleanup_backups(self,root,retention):
   files=sorted(Path(root).glob(f"{self.project.root.name}-*.vcbbackup.zip"),key=lambda p:p.stat().st_mtime,reverse=True)
   for p in files[max(1,int(retention)):]:p.unlink(missing_ok=True)

@@ -162,6 +162,13 @@ def main(argv: list[str] | None = None) -> int:
         pending.mkdir(parents=True)
         if app.exists():
             copytree_portable(app, pending / app.name)
+            if args.platform == "macos":
+                # Finder/quarantine metadata copied from dependency wheels invalidates
+                # nested-code signatures and can make macOS kill the frozen process.
+                run_logged(
+                    ["xattr", "-cr", str(pending / app.name)],
+                    cwd=ROOT, log=failure_log, timeout=120,
+                )
             if args.adhoc_sign:
                 run_logged(["codesign", "--force", "--deep", "--sign", "-", str(pending / app.name)], cwd=ROOT, log=failure_log, timeout=120)
             archive = pending / f"{app.stem}-{version['display_version'].replace(' ', '-')}-{platform.machine()}.zip"
@@ -206,4 +213,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

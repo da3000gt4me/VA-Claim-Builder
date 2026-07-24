@@ -1,5 +1,15 @@
 
-# User Guide — Version 4.2.0 RC1
+# User Guide — Version 4.2.0 RC6
+
+## RC6 OCR review and structured import
+
+Checkboxes are authoritative for OCR and Evidence bulk actions; highlighting
+only opens a preview. The header checkbox selects visible rows. Deleting checked
+OCR outputs or evidence preserves uploaded documents and claims.
+
+Each OCR page exposes raw, normalized, and corrected text. Low-quality native
+text triggers local OCR instead of being skipped. Rotate/retry and readability
+overrides persist. Confirmed claim text is never overwritten.
 
 ## Projects and documents
 

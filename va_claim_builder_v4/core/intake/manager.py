@@ -59,8 +59,23 @@ CREATE TABLE IF NOT EXISTS intake_timeline_sources (
  FOREIGN KEY(event_id) REFERENCES medical_timeline_events(event_id) ON DELETE CASCADE,
  FOREIGN KEY(document_id) REFERENCES documents(document_id) ON DELETE CASCADE
 );
+CREATE TABLE IF NOT EXISTS document_classifications (
+ document_id TEXT PRIMARY KEY, document_type TEXT NOT NULL, revision TEXT NOT NULL DEFAULT '',
+ confidence REAL NOT NULL DEFAULT 0, extraction_method TEXT NOT NULL DEFAULT 'local-rules',
+ user_override TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL,
+ FOREIGN KEY(document_id) REFERENCES documents(document_id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS imported_statements (
+ statement_id TEXT PRIMARY KEY, document_id TEXT NOT NULL UNIQUE, statement_type TEXT NOT NULL,
+ status TEXT NOT NULL DEFAULT 'pending', claim_id TEXT, fields_json TEXT NOT NULL,
+ source_page INTEGER NOT NULL DEFAULT 1, extraction_method TEXT NOT NULL DEFAULT 'local-rules',
+ confidence REAL NOT NULL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+ FOREIGN KEY(document_id) REFERENCES documents(document_id) ON DELETE CASCADE,
+ FOREIGN KEY(claim_id) REFERENCES claims(claim_id) ON DELETE SET NULL
+);
 CREATE INDEX IF NOT EXISTS idx_intake_suggestion_review ON intake_suggestions(status,suggestion_type,created_at);
 CREATE INDEX IF NOT EXISTS idx_intake_run_document ON intake_runs(document_id,started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_imported_statement_review ON imported_statements(statement_type,status,created_at);
 """
 
 
@@ -203,10 +218,23 @@ class IntakeManager:
             from core.claims import ClaimManager
             proposed = str(suggestion.payload.get("proposed_condition_name") or suggestion.title).strip()
             existing = next((item for item in ClaimManager(self.project).list_claims() if item.condition_name.casefold() == proposed.casefold()), None)
-            claim = existing or ClaimManager(self.project).create(
-                proposed, claim_type=str(suggestion.payload.get("possible_claim_type") or "other"),
-                description="Accepted automation suggestion; supporting details remain reviewable drafts.",
-            )
+            proposed_values = {
+                "secondary_to": str(suggestion.payload.get("secondary_to") or ""),
+                "description": str(suggestion.payload.get("description") or ""),
+                "service_event": str(suggestion.payload.get("service_event") or ""),
+            }
+            if existing:
+                # Never overwrite confirmed content: only fill fields that are still blank.
+                changes = {
+                    key: value for key, value in proposed_values.items()
+                    if value and not getattr(existing, key)
+                }
+                claim = ClaimManager(self.project).update(existing.claim_id, **changes) if changes else existing
+            else:
+                claim = ClaimManager(self.project).create(
+                    proposed, claim_type=str(suggestion.payload.get("possible_claim_type") or "other"),
+                    **proposed_values,
+                )
             claim_id = claim.claim_id
         with self._connect() as connection:
             if not connection.execute(
@@ -224,6 +252,17 @@ class IntakeManager:
                     "UPDATE medical_timeline_events SET notes=TRIM(notes || ' Accepted in Automation Review.') WHERE event_id=?",
                     (suggestion.payload["event_id"],),
                 )
+            if status == "accepted" and suggestion.suggestion_type == "claim_field" and claim_id:
+                allowed = {"description", "service_event", "current_diagnosis", "symptoms", "secondary_to"}
+                field_name = str(suggestion.payload.get("field_name") or "")
+                proposed = str(suggestion.payload.get("proposed_value") or "").strip()
+                if field_name in allowed and proposed:
+                    # Confirmed user content wins; accepted extraction fills blanks only.
+                    connection.execute(
+                        f"UPDATE claims SET {field_name}=?,updated_at=? "
+                        f"WHERE claim_id=? AND TRIM({field_name})=''",
+                        (proposed, _now(), claim_id),
+                    )
         return self.get_suggestion(suggestion_id)
 
     def add_claim_draft(self, claim_id, field_name, text, source_ids, version):
@@ -256,6 +295,79 @@ class IntakeManager:
                 (_now(),),
             )
         return cursor.rowcount
+
+    def set_classification(self, document_id, document_type, confidence, revision="", method="local-rules"):
+        with self._connect() as connection:
+            existing = connection.execute(
+                "SELECT user_override FROM document_classifications WHERE document_id=?", (document_id,)
+            ).fetchone()
+            if existing and existing["user_override"]:
+                document_type = existing["user_override"]
+            connection.execute(
+                """INSERT INTO document_classifications VALUES(?,?,?,?,?,?,?)
+                ON CONFLICT(document_id) DO UPDATE SET document_type=excluded.document_type,
+                revision=excluded.revision,confidence=excluded.confidence,
+                extraction_method=excluded.extraction_method,updated_at=excluded.updated_at""",
+                (document_id, document_type, revision, float(confidence), method, existing["user_override"] if existing else "", _now()),
+            )
+
+    def override_classification(self, document_id, document_type):
+        with self._connect() as connection:
+            if not connection.execute(
+                "UPDATE document_classifications SET document_type=?,user_override=?,updated_at=? WHERE document_id=?",
+                (document_type, document_type, _now(), document_id),
+            ).rowcount:
+                raise KeyError(document_id)
+
+    def classification(self, document_id):
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM document_classifications WHERE document_id=?", (document_id,)
+            ).fetchone()
+        return dict(row) if row else None
+
+    def import_statement(self, document_id, statement_type, fields, confidence, claim_id=None):
+        now = _now()
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT statement_id,status FROM imported_statements WHERE document_id=?", (document_id,)
+            ).fetchone()
+            if row:
+                if row["status"] == "pending":
+                    connection.execute(
+                        "UPDATE imported_statements SET statement_type=?,fields_json=?,confidence=?,claim_id=?,updated_at=? "
+                        "WHERE statement_id=?",
+                        (statement_type, json.dumps(fields), float(confidence), claim_id, now, row["statement_id"]),
+                    )
+                return row["statement_id"]
+            statement_id = str(uuid.uuid4())
+            connection.execute(
+                "INSERT INTO imported_statements VALUES(?,?,?,'pending',?,?,1,'local-rules',?,?,?)",
+                (statement_id, document_id, statement_type, claim_id, json.dumps(fields), float(confidence), now, now),
+            )
+        return statement_id
+
+    def list_imported_statements(self, statement_type="", status=""):
+        clauses=[];args=[]
+        if statement_type: clauses.append("statement_type=?");args.append(statement_type)
+        if status: clauses.append("status=?");args.append(status)
+        where=" WHERE "+" AND ".join(clauses) if clauses else ""
+        with self._connect() as connection:
+            rows=connection.execute(
+                "SELECT * FROM imported_statements"+where+" ORDER BY created_at",args
+            ).fetchall()
+        output=[]
+        for row in rows:
+            item=dict(row);item["fields"]=json.loads(item.pop("fields_json"));output.append(item)
+        return output
+
+    def decide_statement(self, statement_id, status):
+        if status not in {"pending","accepted","rejected"}: raise ValueError(status)
+        with self._connect() as connection:
+            if not connection.execute(
+                "UPDATE imported_statements SET status=?,updated_at=? WHERE statement_id=?",
+                (status,_now(),statement_id),
+            ).rowcount: raise KeyError(statement_id)
 
     @staticmethod
     def fingerprint(*values):

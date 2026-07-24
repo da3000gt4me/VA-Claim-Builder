@@ -14,7 +14,7 @@ from typing import Any
 from .paths import AppPaths, resolve_app_paths
 
 PROJECT_FOLDERS = ("uploads", "ocr", "ai", "evidence", "timeline", "reports", "cache", "logs", "temp")
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 11
 
 
 EVIDENCE_SCHEMA = """
@@ -364,6 +364,33 @@ class ProjectManager:
             connection.executescript(
                 """
                 CREATE INDEX IF NOT EXISTS idx_evidence_updated ON evidence(updated_at DESC, evidence_id);
+                CREATE TABLE IF NOT EXISTS ocr_pages (
+                    document_id TEXT NOT NULL,page_number INTEGER NOT NULL,raw_text TEXT NOT NULL DEFAULT '',
+                    normalized_text TEXT NOT NULL DEFAULT '',corrected_text TEXT NOT NULL DEFAULT '',
+                    extraction_method TEXT NOT NULL,state TEXT NOT NULL,confidence REAL NOT NULL DEFAULT 0,
+                    quality_json TEXT NOT NULL DEFAULT '{}',blocks_json TEXT NOT NULL DEFAULT '[]',
+                    failure_reason TEXT NOT NULL DEFAULT '',rotation INTEGER NOT NULL DEFAULT 0,
+                    user_readability TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL,updated_at TEXT NOT NULL,
+                    PRIMARY KEY(document_id,page_number),
+                    FOREIGN KEY(document_id) REFERENCES documents(document_id) ON DELETE CASCADE
+                );
+                CREATE INDEX IF NOT EXISTS idx_ocr_page_review ON ocr_pages(state,confidence);
+                CREATE TABLE IF NOT EXISTS document_classifications (
+                    document_id TEXT PRIMARY KEY,document_type TEXT NOT NULL,revision TEXT NOT NULL DEFAULT '',
+                    confidence REAL NOT NULL DEFAULT 0,extraction_method TEXT NOT NULL DEFAULT 'local-rules',
+                    user_override TEXT NOT NULL DEFAULT '',updated_at TEXT NOT NULL,
+                    FOREIGN KEY(document_id) REFERENCES documents(document_id) ON DELETE CASCADE
+                );
+                CREATE TABLE IF NOT EXISTS imported_statements (
+                    statement_id TEXT PRIMARY KEY,document_id TEXT NOT NULL UNIQUE,statement_type TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'pending',claim_id TEXT,fields_json TEXT NOT NULL,
+                    source_page INTEGER NOT NULL DEFAULT 1,extraction_method TEXT NOT NULL DEFAULT 'local-rules',
+                    confidence REAL NOT NULL DEFAULT 0,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,
+                    FOREIGN KEY(document_id) REFERENCES documents(document_id) ON DELETE CASCADE,
+                    FOREIGN KEY(claim_id) REFERENCES claims(claim_id) ON DELETE SET NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_imported_statement_review
+                    ON imported_statements(statement_type,status,created_at);
                 """
             )
             connection.execute(
